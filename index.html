@@ -4152,7 +4152,7 @@ function callScreenBase(chat, statusText, actionsHTML, tip=''){
       </div>
       <div class="name">${esc(chat.name)}</div>
       <div class="status" id="callStatus">${esc(statusText)}</div>
-      ${tip ? `<div class="call-tip">${esc(tip)}</div>` : ''}
+      ${tip ? `<div class="call-tip" id="callTip">${esc(tip)}</div>` : ''}
     </div>
     <div class="${actionsHTML.includes('call-incoming-btns') ? 'call-incoming-btns' : 'call-actions'}">${actionsHTML}</div>`;
   document.getElementById('modalRoot').appendChild(wrap);
@@ -4240,6 +4240,8 @@ function startVideoCall(chat){
     connected = true;
     activeCall.onEnd = () => finish('ended');
     if(statusEl()) statusEl().textContent = '通话中 · 00:00';
+    const tipEl = wrap.querySelector('#callTip');
+    if(tipEl) tipEl.remove();
     const ft = setTimeout(() => finish('peer-ended'), 14000 + Math.random()*26000);
     timers.push(ft);
   };
@@ -4297,6 +4299,8 @@ function incomingCall(chat){
     if(closed) return;
     connected = true;
     activeCall.onEnd = () => finish('ended');
+    const tipEl = wrap.querySelector('#callTip');
+    if(tipEl) tipEl.remove();
     const btnWrap = wrap.querySelector('.call-incoming-btns');
     if(btnWrap){
       btnWrap.className = 'call-actions';
