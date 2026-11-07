@@ -809,9 +809,9 @@ html[data-bubble="square"] .msg .bubble{border-radius:8px}
 .call-btn.off{background:rgba(255,255,255,.9);color:#1b2437}
 .call-btn.hang{background:#e5484d;width:66px;height:66px;box-shadow:0 10px 30px rgba(229,72,77,.4)}
 .call-btn .ic{width:24px;height:24px}
-.call-min{position:absolute;top:calc(12px + env(safe-area-inset-top));left:14px;z-index:3;width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.14);color:#fff}
+.call-min{position:absolute;top:calc(12px + env(safe-area-inset-top));left:14px;z-index:3;height:34px;padding:0 12px;border-radius:999px;display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.16);color:#fff;font-size:11.5px;font-weight:600;backdrop-filter:blur(6px)}
 .call-min:hover{background:rgba(255,255,255,.24)}
-.call-min .ic{width:20px;height:20px}
+.call-min .ic{width:16px;height:16px}
 .mini-call{
   position:fixed;z-index:136;right:14px;bottom:calc(88px + env(safe-area-inset-bottom));
   display:flex;align-items:center;gap:9px;padding:8px 12px 8px 8px;border-radius:18px;max-width:240px;
@@ -4192,9 +4192,8 @@ function updateCallMiniText(call, text){
 function callMinBtn(call){
   const btn = document.createElement('button');
   btn.className = 'call-min';
-  btn.hidden = true;
   btn.setAttribute('aria-label','缩小通话');
-  btn.innerHTML = icon('i-down');
+  btn.innerHTML = icon('i-down') + '<span>缩小</span>';
   btn.onclick = () => minimizeCall(call);
   call.wrap.appendChild(btn);
   return btn;
@@ -4235,10 +4234,10 @@ function startVideoCall(chat){
     else text = `通话结束 · 时长 ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
     if(chatById(chat.id)) await pushSystemMessage(chat, text);
   };
+  activeCall.onEnd = () => finish(connected ? 'ended' : 'canceled');
   const connect = () => {
     if(closed) return;
     connected = true;
-    minBtn.hidden = false;
     activeCall.onEnd = () => finish('ended');
     if(statusEl()) statusEl().textContent = '通话中 · 00:00';
     const ft = setTimeout(() => finish('peer-ended'), 14000 + Math.random()*26000);
@@ -4293,10 +4292,10 @@ function incomingCall(chat){
     else text = `通话结束 · 时长 ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
     if(chatById(chat.id)) await pushSystemMessage(chat, text);
   };
+  activeCall.onEnd = () => finish(connected ? 'ended' : 'rejected');
   const connect = () => {
     if(closed) return;
     connected = true;
-    minBtn.hidden = false;
     activeCall.onEnd = () => finish('ended');
     const btnWrap = wrap.querySelector('.call-incoming-btns');
     if(btnWrap){
