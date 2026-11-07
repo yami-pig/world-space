@@ -809,6 +809,22 @@ html[data-bubble="square"] .msg .bubble{border-radius:8px}
 .call-btn.off{background:rgba(255,255,255,.9);color:#1b2437}
 .call-btn.hang{background:#e5484d;width:66px;height:66px;box-shadow:0 10px 30px rgba(229,72,77,.4)}
 .call-btn .ic{width:24px;height:24px}
+.call-min{position:absolute;top:calc(12px + env(safe-area-inset-top));left:14px;z-index:3;width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.14);color:#fff}
+.call-min:hover{background:rgba(255,255,255,.24)}
+.call-min .ic{width:20px;height:20px}
+.mini-call{
+  position:fixed;z-index:136;right:14px;bottom:calc(88px + env(safe-area-inset-bottom));
+  display:flex;align-items:center;gap:9px;padding:8px 12px 8px 8px;border-radius:18px;max-width:240px;
+  background:linear-gradient(135deg,#3a2330,#22141b);color:#fff;box-shadow:0 14px 40px rgba(40,20,30,.38);
+  animation:miniIn .2s ease both;
+}
+.mini-call img{width:34px;height:34px;border-radius:12px;object-fit:cover;flex:none}
+.mini-call .grow{min-width:0}
+.mini-call .nm{font-size:12px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-call .tm{font-size:10.5px;opacity:.66;margin-top:1px;font-variant-numeric:tabular-nums}
+.mini-call .end{width:30px;height:30px;border-radius:10px;background:#e5484d;display:flex;align-items:center;justify-content:center;flex:none}
+.mini-call .end .ic{width:16px;height:16px}
+@keyframes miniIn{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
 @keyframes pulse{0%{transform:scale(.96);opacity:.7}50%{transform:scale(1.04);opacity:.25}100%{transform:scale(.96);opacity:.7}}
 
 /* ============ 响应式 ============ */
@@ -4142,6 +4158,47 @@ function callScreenBase(chat, statusText, actionsHTML, tip=''){
   document.getElementById('modalRoot').appendChild(wrap);
   return wrap;
 }
+function minimizeCall(call){
+  if(!call || call.miniEl) return;
+  const chat = call.chat;
+  const el = document.createElement('div');
+  el.className = 'mini-call';
+  el.innerHTML = `<img src="${chat.avatar || genAvatar(chat.name)}" alt="">
+    <div class="grow"><div class="nm">${esc(chat.name)}</div><div class="tm">通话中 · 00:00</div></div>
+    <button class="end" aria-label="挂断">${icon('i-hangup')}</button>`;
+  el.querySelector('.end').onclick = e => {
+    e.stopPropagation();
+    if(typeof call.onEnd === 'function') call.onEnd();
+  };
+  el.onclick = () => {
+    el.remove();
+    call.miniEl = null;
+    call.wrap.hidden = false;
+  };
+  call.miniEl = el;
+  call.wrap.hidden = true;
+  document.body.appendChild(el);
+}
+function closeCallMini(call){
+  if(call && call.miniEl){ call.miniEl.remove(); call.miniEl = null; }
+  if(call && call.wrap) call.wrap.hidden = false;
+}
+function updateCallMiniText(call, text){
+  if(call && call.miniEl){
+    const t = call.miniEl.querySelector('.tm');
+    if(t) t.textContent = text;
+  }
+}
+function callMinBtn(call){
+  const btn = document.createElement('button');
+  btn.className = 'call-min';
+  btn.hidden = true;
+  btn.setAttribute('aria-label','缩小通话');
+  btn.innerHTML = icon('i-down');
+  btn.onclick = () => minimizeCall(call);
+  call.wrap.appendChild(btn);
+  return btn;
+}
 function startVideoCall(chat){
   if(!chat) return;
   if(activeCall){ toast('正在通话中'); return; }
@@ -4153,17 +4210,21 @@ function startVideoCall(chat){
   const timers = [];
   let sec = 0, connected = false, closed = false;
   activeCall = { chat, wrap, timers };
+  const minBtn = callMinBtn(activeCall);
   const statusEl = () => wrap.querySelector('#callStatus');
   const clearAll = () => { timers.forEach(t => clearTimeout(t)); clearInterval(timer); };
   const timer = setInterval(() => {
     if(!connected || closed) return;
     sec++;
-    if(statusEl()) statusEl().textContent = `通话中 · ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
+    const txt = `通话中 · ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
+    if(statusEl()) statusEl().textContent = txt;
+    updateCallMiniText(activeCall, txt);
   }, 1000);
   const finish = async (reason) => {
     if(closed) return;
     closed = true;
     clearAll();
+    closeCallMini(activeCall);
     wrap.remove();
     activeCall = null;
     let text = '';
@@ -4177,6 +4238,8 @@ function startVideoCall(chat){
   const connect = () => {
     if(closed) return;
     connected = true;
+    minBtn.hidden = false;
+    activeCall.onEnd = () => finish('ended');
     if(statusEl()) statusEl().textContent = '通话中 · 00:00';
     const ft = setTimeout(() => finish('peer-ended'), 14000 + Math.random()*26000);
     timers.push(ft);
@@ -4212,6 +4275,7 @@ function incomingCall(chat){
   const timers = [];
   let connected = false, closed = false, sec = 0;
   activeCall = { chat, wrap, timers };
+  const minBtn = callMinBtn(activeCall);
   const statusEl = () => wrap.querySelector('#callStatus');
   let timer = null;
   const finish = async (reason) => {
@@ -4219,6 +4283,7 @@ function incomingCall(chat){
     closed = true;
     timers.forEach(t => clearTimeout(t));
     if(timer) clearInterval(timer);
+    closeCallMini(activeCall);
     wrap.remove();
     activeCall = null;
     let text = '';
@@ -4231,6 +4296,8 @@ function incomingCall(chat){
   const connect = () => {
     if(closed) return;
     connected = true;
+    minBtn.hidden = false;
+    activeCall.onEnd = () => finish('ended');
     const btnWrap = wrap.querySelector('.call-incoming-btns');
     if(btnWrap){
       btnWrap.className = 'call-actions';
@@ -4250,7 +4317,9 @@ function incomingCall(chat){
     if(statusEl()) statusEl().textContent = '通话中 · 00:00';
     timer = setInterval(() => {
       sec++;
-      if(statusEl()) statusEl().textContent = `通话中 · ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
+      const txt = `通话中 · ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
+      if(statusEl()) statusEl().textContent = txt;
+      updateCallMiniText(activeCall, txt);
     }, 1000);
     timers.push(setTimeout(() => finish('peer-ended'), 15000 + Math.random()*25000));
   };
