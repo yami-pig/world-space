@@ -4156,7 +4156,7 @@ function callScreenBase(chat, statusText, actionsHTML, tip=''){
       <div class="status" id="callStatus">${esc(statusText)}</div>
       ${tip ? `<div class="call-tip" id="callTip">${esc(tip)}</div>` : ''}
     </div>
-    <div class="${actionsHTML.includes('call-incoming-btns') ? 'call-incoming-btns' : 'call-actions'}">${actionsHTML}</div>`;
+    <div class="${actionsHTML.includes('callAnswer') ? 'call-incoming-btns' : 'call-actions'}">${actionsHTML}</div>`;
   document.getElementById('modalRoot').appendChild(wrap);
   return wrap;
 }
