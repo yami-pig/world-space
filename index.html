@@ -376,6 +376,16 @@ h1,h2,h3,h4,p{margin:0}
 .lib-item.kaomoji{font-size:15px}
 .lib-item.pat,.lib-item.status{justify-content:flex-start;text-align:left;min-height:48px;font-size:12.5px;color:var(--text-2)}
 .lib-item.status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:8px;flex:none}
+.lib-item.card{padding-top:24px}
+.lib-item.pat,.lib-item.status{padding-right:48px}
+.lib-item.disabled > span:not(.plib-toggle),.lib-item.disabled img{opacity:.32;filter:grayscale(1)}
+.lib-item.disabled > span:not(.plib-toggle){text-decoration:line-through}
+.plib-toggle{
+  position:absolute;top:5px;right:5px;z-index:2;padding:3px 7px;border-radius:8px;
+  font-size:10px;font-weight:700;line-height:1.2;background:rgba(255,255,255,.94);
+  color:var(--text-2);border:1px solid var(--line-strong);text-decoration:none!important;
+}
+.plib-toggle.off{background:var(--danger-soft);color:var(--danger);border-color:transparent}
 .lib-empty{grid-column:1/-1;text-align:center;color:var(--text-3);font-size:12.5px;padding:40px 10px}
 .lib-bar{
   position:fixed;z-index:40;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);
@@ -1694,7 +1704,7 @@ function privateItems(friendId, owner){
 function friendLibPool(friendId, types){
   const t = types || ['card','kaomoji','emoji','sticker','pat','status'];
   return library.filter(x => t.includes(x.type))
-    .concat(privateLibrary.filter(x => x.friendId === friendId && x.owner === 'friend' && t.includes(x.type)));
+    .concat(privateLibrary.filter(x => x.friendId === friendId && x.owner === 'friend' && t.includes(x.type) && !x.disabled));
 }
 async function ensureFriendPrivate(friendId){
   if(privateLibrary.some(x => x.friendId === friendId && x.owner === 'friend')) return;
@@ -2811,7 +2821,7 @@ function renderPrivateLibPage(){
     </div>
     <div class="lib-body">
       <div class="lib-grid">${items.length ? items.map(plibItemHTML).join('') : `<div class="lib-empty">「${LIB_TYPES[type].label}」里还没有词条<br>点击右上角的按钮添加</div>`}</div>
-      <p class="preview-note" style="text-align:center;margin-top:18px">这些词条只属于当前好友 · 点右上角「管理」可全选删除</p>
+      <p class="preview-note" style="text-align:center;margin-top:18px">这些词条只属于当前好友 · 点词条右上角可禁用/启用 · 「管理」里可全选删除</p>
     </div>
     ${ui.plibManage ? `
       <div class="lib-bar">
@@ -2825,11 +2835,12 @@ function renderPrivateLibPage(){
 function plibItemHTML(item){
   const selected = ui.plibSel.has(item.id);
   const dot = ui.plibManage ? `<span class="sel-dot">${selected ? icon('i-check') : ''}</span>` : '';
-  const cls = `lib-item ${item.type} ${selected ? 'selected' : ''}`;
+  const cls = `lib-item ${item.type} ${selected ? 'selected' : ''} ${item.disabled ? 'disabled' : ''}`;
+  const toggle = ui.plibManage ? '' : `<span class="plib-toggle ${item.disabled ? 'off' : ''}" data-act="plib-toggle" data-id="${item.id}">${item.disabled ? '已禁用' : '禁用'}</span>`;
   if(item.type === 'sticker'){
-    return `<div class="${cls}" data-act="plib-item" data-id="${item.id}"><img src="${item.content}" alt="${esc(item.label || '表情包')}">${dot}</div>`;
+    return `<div class="${cls}" data-act="plib-item" data-id="${item.id}"><img src="${item.content}" alt="${esc(item.label || '表情包')}">${toggle}${dot}</div>`;
   }
-  return `<div class="${cls}" data-act="plib-item" data-id="${item.id}"><span>${esc(item.content)}</span>${dot}</div>`;
+  return `<div class="${cls}" data-act="plib-item" data-id="${item.id}"><span>${esc(item.content)}</span>${toggle}${dot}</div>`;
 }
 function togglePlibSelection(id){
   if(ui.plibSel.has(id)) ui.plibSel.delete(id); else ui.plibSel.add(id);
@@ -3982,7 +3993,7 @@ function replyPool(chat){
   const types = ['card','kaomoji','emoji','sticker'];
   const base = library.filter(x => types.includes(x.type));
   if(!chat || chat.kind !== 'friend') return base;
-  return base.concat(privateLibrary.filter(x => x.friendId === chat.refId && x.owner === 'friend' && types.includes(x.type)));
+  return base.concat(privateLibrary.filter(x => x.friendId === chat.refId && x.owner === 'friend' && types.includes(x.type) && !x.disabled));
 }
 async function receiveFriendMessage(chat, senderId, item){
   const msg = {
@@ -4282,7 +4293,7 @@ function openExpressionPicker(chat){
 function expressionItems(chat, type, src){
   if(src === 'public') return library.filter(x => x.type === type);
   const owner = src === 'mine' ? 'mine' : 'friend';
-  return privateLibrary.filter(x => x.friendId === chat.refId && x.owner === owner && x.type === type);
+  return privateLibrary.filter(x => x.friendId === chat.refId && x.owner === owner && x.type === type && !x.disabled);
 }
 function renderExpressionSheet(chat){
   if(!chat) return;
@@ -6329,6 +6340,15 @@ document.addEventListener('click', async e => {
     case 'plib-item':
       if(ui.plibManage) togglePlibSelection(id);
       break;
+    case 'plib-toggle': {
+      const item = privateLibrary.find(x => x.id === id);
+      if(!item) break;
+      item.disabled = !item.disabled;
+      await dbPut('privateLibrary', item);
+      toast(item.disabled ? '已禁用，TA 不会再使用这条' : '已启用');
+      render();
+      break;
+    }
     case 'plib-manage':
       ui.plibManage = !ui.plibManage;
       ui.plibSel.clear();
