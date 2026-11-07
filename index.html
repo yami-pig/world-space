@@ -817,7 +817,9 @@ html[data-bubble="square"] .msg .bubble{border-radius:8px}
   display:flex;align-items:center;gap:9px;padding:8px 12px 8px 8px;border-radius:18px;max-width:240px;
   background:linear-gradient(135deg,#3a2330,#22141b);color:#fff;box-shadow:0 14px 40px rgba(40,20,30,.38);
   animation:miniIn .2s ease both;
+  touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;
 }
+.mini-call.dragging{cursor:grabbing;animation:none}
 .mini-call img{width:34px;height:34px;border-radius:12px;object-fit:cover;flex:none}
 .mini-call .grow{min-width:0}
 .mini-call .nm{font-size:12px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -4158,6 +4160,42 @@ function callScreenBase(chat, statusText, actionsHTML, tip=''){
   document.getElementById('modalRoot').appendChild(wrap);
   return wrap;
 }
+function makeMiniDraggable(el, call){
+  let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
+  el.addEventListener('pointerdown', e => {
+    if(e.target.closest('.end')) return;
+    const r = el.getBoundingClientRect();
+    dragging = true;
+    el.dataset.moved = '';
+    sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+    el.style.left = r.left + 'px';
+    el.style.top = r.top + 'px';
+    el.classList.add('dragging');
+    try{ el.setPointerCapture(e.pointerId); }catch(_){}
+    e.preventDefault();
+  });
+  el.addEventListener('pointermove', e => {
+    if(!dragging) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if(Math.abs(dx) > 4 || Math.abs(dy) > 4) el.dataset.moved = '1';
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const nx = Math.max(6, Math.min(window.innerWidth - w - 6, ox + dx));
+    const ny = Math.max(6, Math.min(window.innerHeight - h - 6, oy + dy));
+    el.style.left = nx + 'px';
+    el.style.top = ny + 'px';
+    e.preventDefault();
+  });
+  const end = e => {
+    if(!dragging) return;
+    dragging = false;
+    el.classList.remove('dragging');
+    try{ el.releasePointerCapture(e.pointerId); }catch(_){}
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
 function minimizeCall(call){
   if(!call || call.miniEl) return;
   const chat = call.chat;
@@ -4171,10 +4209,12 @@ function minimizeCall(call){
     if(typeof call.onEnd === 'function') call.onEnd();
   };
   el.onclick = () => {
+    if(el.dataset.moved === '1'){ el.dataset.moved = ''; return; }
     el.remove();
     call.miniEl = null;
     call.wrap.hidden = false;
   };
+  makeMiniDraggable(el, call);
   call.miniEl = el;
   call.wrap.hidden = true;
   document.body.appendChild(el);
@@ -4182,6 +4222,7 @@ function minimizeCall(call){
 function closeCallMini(call){
   if(call && call.miniEl){ call.miniEl.remove(); call.miniEl = null; }
   if(call && call.wrap) call.wrap.hidden = false;
+  document.querySelectorAll('.mini-call').forEach(el => el.remove());
 }
 function updateCallMiniText(call, text){
   if(call && call.miniEl){
