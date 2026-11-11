@@ -1049,6 +1049,35 @@ html[data-bubble="square"] .msg .bubble{border-radius:8px}
 .letter-quote{font-size:10.5px;color:var(--text-3);background:rgba(20,35,60,.04);border-radius:8px;padding:6px 8px;margin-bottom:7px;line-height:1.6;max-height:64px;overflow:hidden}
 .letter-compose{min-height:170px}
 
+/* 信纸全屏阅读 */
+.paper-overlay{position:fixed;inset:0;z-index:120;display:flex;flex-direction:column;animation:fadeIn .18s ease both;
+  background:
+    radial-gradient(900px 600px at 12% 0%,rgba(250,176,204,.4),transparent 60%),
+    linear-gradient(160deg,#fbe3ee 0%,#fdf0f6 45%,#f9e4ed 100%)}
+.paper-top{flex:0 0 auto;display:flex;align-items:center;gap:8px;
+  padding:calc(8px + env(safe-area-inset-top)) 12px 8px;
+  background:rgba(255,255,255,.6);
+  -webkit-backdrop-filter:blur(22px) saturate(1.4);backdrop-filter:blur(22px) saturate(1.4);
+  border-bottom:1px solid var(--line)}
+.paper-title{flex:1;text-align:center;font-size:16.5px;font-weight:750;letter-spacing:.06em}
+.paper-acts{display:flex;gap:8px;min-width:40px;justify-content:flex-end}
+.paper-pill{height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--line-strong);
+  background:rgba(255,255,255,.78);font-size:12.5px;font-weight:650;color:var(--text);transition:.15s;white-space:nowrap}
+.paper-pill:active{transform:scale(.94)}
+.paper-pill.danger{color:var(--danger);border-color:rgba(229,72,77,.3);background:var(--danger-soft)}
+.paper-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 14px calc(34px + env(safe-area-inset-bottom))}
+.paper-card{max-width:560px;margin:0 auto;min-height:74%;
+  background:linear-gradient(175deg,#fffefa,#fffdf4);
+  border:1px solid rgba(198,160,90,.2);border-radius:18px;
+  box-shadow:0 14px 40px rgba(120,60,90,.1);
+  padding:24px 22px 36px}
+.paper-date{text-align:right;font-size:12px;color:var(--text-3);letter-spacing:.06em;font-variant-numeric:tabular-nums}
+.paper-subject{margin-top:16px;font-size:14.5px;color:var(--text-2);display:flex;gap:14px}
+.paper-subject span{color:var(--text-3);font-size:13px;flex:none}
+.paper-text{margin-top:12px;font-size:16.5px;line-height:2.05;color:var(--text);text-indent:2em;white-space:pre-wrap;word-break:break-word}
+.paper-sign{margin-top:30px;text-align:right;font-size:14.5px;color:var(--text-2)}
+.diary-card{cursor:pointer}
+
 /* 通话 */
 .call-incoming-btns{display:flex;gap:26px;position:relative;z-index:1}
 .call-tip{font-size:11px;opacity:.55;margin-top:8px;position:relative;z-index:1}
@@ -3533,7 +3562,7 @@ function messageHTML(chat, m){
     content = `<div class="survey-head">${icon('i-mail','sm')} 信封</div>
       <div class="survey-body"><div class="survey-title">${esc(l ? (l.title || '一封信') : '一封信')}</div>
       <div class="survey-meta">${esc(l ? (l.dir === 'in' ? '他写给你的一封信，点开看看。' : '你寄出的信，等待他的回信。') : '')}</div>
-      <button class="survey-btn" data-act="open-letter" data-id="${esc(chat.refId)}">${icon('i-mail','sm')} 打开信封</button></div>`;
+      <button class="survey-btn" data-act="open-letter" data-id="${esc(l ? l.id : chat.refId)}">${icon('i-mail','sm')} 打开信封</button></div>`;
   }else{
     content = esc(m.content || '');
   }
@@ -5195,6 +5224,115 @@ function openFriendPick(title, hint, cb){
   });
 }
 let letterView = { friendId:null, tab:'out' };
+function openPaperReader(cfg){
+  const overlay = document.createElement('div');
+  overlay.className = 'paper-overlay';
+  overlay.innerHTML = `<div class="paper-top">
+      <button class="icon-btn" type="button" data-paper-back aria-label="返回">${icon('i-back','lg')}</button>
+      <div class="paper-title">${esc(cfg.title || '')}</div>
+      <div class="paper-acts">${cfg.actions || ''}</div>
+    </div>
+    <div class="paper-body">
+      <div class="paper-card">
+        ${cfg.dateLine ? `<div class="paper-date">${cfg.dateLine}</div>` : ''}
+        ${cfg.subject ? `<div class="paper-subject"><span>由头</span><div class="grow">${esc(cfg.subject)}</div></div>` : ''}
+        <div class="paper-text">${esc(cfg.text || '')}</div>
+        ${cfg.sign ? `<div class="paper-sign">—— ${esc(cfg.sign)}</div>` : ''}
+        ${cfg.extra || ''}
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const onKey = e => { if(e.key === 'Escape') close(); };
+  const close = () => { document.removeEventListener('keydown', onKey); overlay.remove(); };
+  document.addEventListener('keydown', onKey);
+  overlay.querySelector('[data-paper-back]').onclick = close;
+  if(typeof cfg.onMount === 'function') cfg.onMount(overlay, close);
+}
+function openLetterReader(letterId){
+  const l = letters.find(x => x.id === letterId);
+  if(!l) return;
+  const f = friendById(l.friendId);
+  if(!f) return;
+  const label = l.dir === 'in' ? (l.replyTo ? '他的回信' : '来信') : (l.replyTo ? '我的回信' : '去信');
+  const same = letters.filter(x => x.friendId === l.friendId && x.dir === l.dir).sort((a,b) => (a.at||0)-(b.at||0));
+  const idx = same.findIndex(x => x.id === l.id) + 1;
+  const d = new Date(l.at || Date.now());
+  const wk = '日一二三四五六'[d.getDay()];
+  const canReply = l.dir === 'in' && !l.replyTo;
+  openPaperReader({
+    title: label,
+    actions:`${canReply ? `<button class="paper-pill" type="button" data-paper-reply>回一封信</button>` : ''}
+      <button class="paper-pill danger" type="button" data-paper-del>删除</button>`,
+    dateLine:`${d.getMonth()+1}月 · 周${wk} ${fmtClock(l.at)} · 第 ${idx} 封`,
+    subject: l.title || '',
+    text: l.content || '',
+    sign: l.dir === 'in' ? f.name : (me?.name || '我'),
+    onMount(overlay, close){
+      const rb = overlay.querySelector('[data-paper-reply]');
+      if(rb) rb.onclick = () => { close(); setTimeout(() => openLetterCompose(l.friendId, l), 60); };
+      overlay.querySelector('[data-paper-del]').onclick = async () => {
+        close();
+        const ok = await confirmDialog({title:'删除这封信', message:'删除后无法恢复，确定删除吗？', danger:true, confirmText:'删除'});
+        if(!ok){ renderLetterCenter(); return; }
+        await dbDelete('letters', l.id);
+        letters = letters.filter(x => x.id !== l.id);
+        toast('信已删除');
+        setTimeout(renderLetterCenter, 60);
+      };
+    }
+  });
+}
+function openDiaryReader(id){
+  const d = diaries.find(x => x.id === id);
+  if(!d) return;
+  const dd = new Date(d.at || Date.now());
+  const wk = '日一二三四五六'[dd.getDay()];
+  openPaperReader({
+    title:'日记',
+    actions:`<button class="paper-pill" type="button" data-paper-edit>编辑</button>
+      <button class="paper-pill danger" type="button" data-paper-del>删除</button>`,
+    dateLine:`${dd.getMonth()+1}月${dd.getDate()}日 · 周${wk} ${fmtClock(d.at)}`,
+    subject: d.title || '',
+    text: d.text || '',
+    sign: me?.name || '我',
+    onMount(overlay, close){
+      overlay.querySelector('[data-paper-edit]').onclick = () => { close(); setTimeout(() => openDiaryForm(d), 60); };
+      overlay.querySelector('[data-paper-del]').onclick = async () => {
+        close();
+        const ok = await confirmDialog({title:'删除日记', message:'确定删除这篇日记吗？好友的回复也会一起消失。', danger:true, confirmText:'删除'});
+        if(!ok) return;
+        await dbDelete('diaries', d.id);
+        diaries = diaries.filter(x => x.id !== d.id);
+        ui.diaryExpanded.delete(d.id);
+        toast('日记已删除');
+        softRender();
+      };
+    }
+  });
+}
+function openFriendDiaryReader(post){
+  const f = friendById(post.friendId);
+  if(!f) return;
+  const dd = new Date(post.at || Date.now());
+  const wk = '日一二三四五六'[dd.getDay()];
+  openPaperReader({
+    title:'他的日记',
+    actions:`<button class="paper-pill danger" type="button" data-paper-del>删除</button>`,
+    dateLine:`${dd.getMonth()+1}月${dd.getDate()}日 · 周${wk} ${fmtClock(post.at)}`,
+    text: post.text || '',
+    sign: f.name,
+    onMount(overlay, close){
+      overlay.querySelector('[data-paper-del]').onclick = async () => {
+        close();
+        const ok = await confirmDialog({title:'删除日记', message:`确定删除「${f.name}」的这篇日记吗？`, danger:true, confirmText:'删除'});
+        if(!ok) return;
+        await dbDelete('friendPosts', post.id);
+        friendPosts = friendPosts.filter(x => x.id !== post.id);
+        toast('日记已删除');
+      };
+    }
+  });
+}
 function letterTabItems(friendId, tab){
   const list = letters.filter(x => x.friendId === friendId);
   if(tab === 'out') return list.filter(x => x.dir === 'out' && !x.replyTo);
@@ -5221,14 +5359,13 @@ function renderLetterCenter(){
     const pending = l.dir === 'out' && !l.replyTo && l.status === 'pending';
     const expired = pending && Date.now() > l.deadline;
     const canReply = l.dir === 'in' && !l.replyTo;
-    return `<div class="letter-card ${l.dir === 'in' ? 'in' : ''}">
+    return `<div class="letter-card ${l.dir === 'in' ? 'in' : ''}" data-letter-open="${l.id}" role="button" style="cursor:pointer">
       <div class="letter-head">${icon('i-mail','sm')}
         <span class="grow">${esc(l.title || (l.dir === 'in' ? '他写来的信' : '我写的信'))}</span>
         <span class="letter-status ${pending ? '' : 'done'}">${pending ? (expired ? '已超时' : '待回信') : (l.replyTo ? '回信' : '已收到')}</span>
       </div>
       <div style="font-size:9.5px;color:var(--text-3);margin-bottom:6px">${fmtFull(l.at)}</div>
       <div class="letter-body">${esc(l.content || '')}</div>
-      <div class="letter-more" data-letter-toggle>展开全文 / 收起</div>
       ${replyLetter ? `<div class="letter-quote" style="margin-top:8px">回复了：${esc((replyLetter.content||'').slice(0,60))}…</div>` : ''}
       ${pending ? `<div style="font-size:10px;color:var(--text-3);margin-top:8px">对方需在 ${fmtFull(l.deadline)} 前回信${expired?' · 已超过期限':''}</div>` : ''}
       ${canReply ? `<div class="letter-actions"><button class="btn tiny ghost" data-letter-reply="${l.id}">${icon('i-edit','sm')} 写回信</button></div>` : ''}
@@ -5246,9 +5383,9 @@ function renderLetterCenter(){
       <button class="btn ghost" data-letter-ask>${icon('i-mail','sm')} 让他写一封</button>`,
     onMount(el, close){
       el.querySelectorAll('[data-ltab]').forEach(b => b.onclick = () => { letterView.tab = b.dataset.ltab; close(); setTimeout(renderLetterCenter, 40); });
-      el.querySelectorAll('[data-letter-toggle]').forEach(b => b.onclick = () => {
-        const body = b.parentElement.querySelector('.letter-body');
-        if(body) body.classList.toggle('open');
+      el.querySelectorAll('[data-letter-open]').forEach(c => c.onclick = e => {
+        if(e.target.closest('[data-letter-reply]')) return;
+        openLetterReader(c.dataset.letterOpen);
       });
       el.querySelectorAll('[data-letter-reply]').forEach(b => b.onclick = () => {
         const l = letters.find(x => x.id === b.dataset.letterReply);
@@ -5341,7 +5478,7 @@ async function generateFriendPost(friendId, kind){
 }
 function friendPostHTML(p, f){
   const comments = (p.comments || []).map(c => `<div class="fpost-comment"><b>${esc(c.name)}</b>：${esc(c.text)}</div>`).join('');
-  return `<div class="fpost">
+  return `<div class="fpost" data-fpost-id="${p.id}">
     <div class="fpost-head">
       <img src="${f.avatar || genAvatar(f.name)}" alt="">
       <div class="grow"><div class="fpost-name">${esc(f.name)}</div><div class="fpost-time">${fmtFull(p.at)}</div></div>
@@ -5375,6 +5512,16 @@ async function openFriendPosts(friendId, kind){
         close();
         setTimeout(() => openFriendPosts(friendId, kind), 60);
       };
+      if(kind === 'diary'){
+        el.querySelectorAll('.fpost[data-fpost-id]').forEach(card => {
+          card.style.cursor = 'pointer';
+          card.onclick = e => {
+            if(e.target.closest('[data-fpost-comment]')) return;
+            const p = friendPosts.find(x => x.id === card.dataset.fpostId);
+            if(p) openFriendDiaryReader(p);
+          };
+        });
+      }
       el.querySelectorAll('[data-fpost-comment]').forEach(b => b.onclick = () => {
         const p = friendPosts.find(x => x.id === b.dataset.fpostComment);
         close();
@@ -6349,7 +6496,7 @@ function diaryHTML(d){
   const shown = expanded || !long ? text : text.slice(0, 220) + '…';
   const comments = d.comments || [];
   const dd = new Date(d.at);
-  return `<div class="diary-card">
+  return `<div class="diary-card" data-act="diary-open" data-id="${d.id}" role="button">
     <div class="diary-head">
       <div class="diary-date"><b>${dd.getDate()}</b><span>${dd.getMonth()+1}月</span></div>
       <div class="grow">
@@ -6649,6 +6796,9 @@ document.addEventListener('click', async e => {
     case 'diary-add':
       openDiaryForm();
       break;
+    case 'diary-open':
+      openDiaryReader(id);
+      break;
     case 'letter-pick':
       openFriendPick('信封 · 选择好友', '选择一位好友，打开你们之间的信封。', f => openLetterCenter(f.id));
       break;
@@ -6712,9 +6862,12 @@ document.addEventListener('click', async e => {
     case 'survey-open':
       openSurvey(trigger.dataset.id);
       break;
-    case 'open-letter':
-      if(chat && chat.kind === 'friend') openLetterCenter(chat.refId);
+    case 'open-letter': {
+      const ll = letters.find(x => x.id === id);
+      if(ll) openLetterReader(ll.id);
+      else if(chat && chat.kind === 'friend') openLetterCenter(chat.refId);
       break;
+    }
     case 'view-image':
       if(Date.now() - msgLongPressedAt < 700) break;
       viewImage(trigger.dataset.msg);
