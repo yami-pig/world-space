@@ -1692,24 +1692,6 @@ function groupMembers(g){
 function groupMemberCount(g){ return (g?.memberIds?.length || 0) + 1; }
 
 /* ---------- 提示词二：好友扩展数据 ---------- */
-const FRIEND_SENTENCES = [
-  '今天路过一家很安静的咖啡馆，忽然想起你','风从窗边吹进来，桌上的纸轻轻动了一下',
-  '晚上吃了热汤面，整个人都暖起来了','刚刚看到一片很好看的云，想拍给你',
-  '今天有点忙，但一想到你就没那么累了','路过旧书店，闻到纸页的味道',
-  '把想说的话写下来，又觉得太矫情','最近睡得晚，你有好好休息吗',
-  '想和你一起去看一场没有看过的电影','今天的月亮很圆，你那边能看到吗',
-  '听到一首老歌，单曲循环了很久','整理房间时翻到一张旧照片',
-  '周末想去走走，不赶时间的那种','天气凉了，记得加一件外套',
-  '今天被一件小事逗笑了很久','泡了一杯茶，看着热气发呆',
-  '有点想见你，但也说不清为什么','把今天的心情折好，收进口袋里',
-  '如果现在能一起散步就好了','刚刚下了几滴雨，空气很干净',
-  '工作告一段落，终于可以喘口气','突然发现我们认识很久了',
-  '今天的晚霞是橘粉色的','把窗帘拉开，阳光铺了一地',
-  '偶尔也会想，未来会是什么样子','你上次说的那件事，我记着呢',
-  '今天胃口很好，多吃了一碗饭','刚洗完头发，整个人轻飘飘的',
-  '街角的花开了，颜色很温柔','想听听你今天发生了什么'
-];
-
 function defaultFriendMeta(id, f){
   const now = Date.now();
   const birthday = '2000-05-20';
@@ -1775,14 +1757,14 @@ function libTextPool(friendId, types){
 }
 function composeFromPool(friendId, min, max, types, opts={}){
   const pool = libTextPool(friendId, types);
-  const src = pool.length ? pool : FRIEND_SENTENCES.slice();
+  if(!pool.length) return '';
   const n = min + Math.floor(Math.random() * (max - min + 1));
   const out = [];
   for(let i=0;i<n;i++){
-    let s = opts.unique ? '' : pick(src);
+    let s = opts.unique ? '' : pick(pool);
     if(opts.unique){
-      const remain = src.filter(x => !out.includes(x));
-      s = pick(remain.length ? remain : src);
+      const remain = pool.filter(x => !out.includes(x));
+      s = pick(remain.length ? remain : pool);
     }
     const last = out[out.length-1];
     if(s && s !== last) out.push(s);
@@ -4093,7 +4075,8 @@ async function deliverAutoReply(chat){
     const count = cfg.pace.combo ? 1 + Math.floor(Math.random()*3) : 1;
     for(let i=0;i<count;i++){
       if(!chatById(chat.id)) return;
-      const item = pick(pool) || {type:'card', content:'嗯嗯'};
+      const item = pick(pool);
+      if(!item) return;
       await receiveFriendMessage(chat, replySenderId(chat), item);
       if(i < count-1) await sleep(680);
     }
@@ -4110,7 +4093,8 @@ async function deliverSpontaneous(chat){
   try{
     if(!chatById(chat.id)) return;
     const pool = replyPool(chat);
-    const item = pick(pool) || {type:'card', content:'在忙吗？'};
+    const item = pick(pool);
+    if(!item) return;
     await receiveFriendMessage(chat, replySenderId(chat), item);
     const changed = await markMyMessagesRead(chat.id);
     if(changed) await refreshChat(false);
@@ -5437,6 +5421,7 @@ async function generateIncomingLetter(friendId, silent=false){
   const f = friendById(friendId);
   if(!f) return null;
   const content = composeFromPool(friendId, 10, 20, ['card','kaomoji','emoji'], {sep:'\n'});
+  if(!content) return null;
   const letter = {
     id:'letter_'+uid(), friendId, dir:'in', replyTo:null,
     title: pick(['写给你的信','见字如面','夜里写下的几句话','今天想和你说','一封没有寄出的信']),
@@ -5459,6 +5444,7 @@ async function generateFriendPost(friendId, kind){
   if(!f) return null;
   await ensureFriendPrivate(friendId);
   const text = composeFromPool(friendId, 10, 30, ['card','kaomoji','emoji'], {sep:'\n'});
+  if(!text) return null;
   const images = [];
   if(kind === 'moment' && Math.random() < 0.5){
     const stickers = friendLibPool(friendId, ['sticker']).map(x => x.content);
@@ -5818,10 +5804,12 @@ async function processTimedFeatures(now){
     if(!l.replyAt || now < l.replyAt) continue;
     const f = friendById(l.friendId);
     if(!f) continue;
+    const replyContent = composeFromPool(l.friendId, 10, 20, ['card','kaomoji','emoji'], {sep:'\n'});
+    if(!replyContent) continue;
     const reply = {
       id:'letter_'+uid(), friendId:l.friendId, dir:'in', replyTo:l.id,
       title: pick(['回信','收到你的信了','想和你说']),
-      content: composeFromPool(l.friendId, 10, 20, ['card','kaomoji','emoji'], {sep:'\n'}),
+      content: replyContent,
       at:now, status:'received', deadline:0, replyAt:0
     };
     letters.push(reply);
@@ -5834,12 +5822,14 @@ async function processTimedFeatures(now){
 
   for(const p of friendPosts){
     if(!p.pendingReplyAt || now < p.pendingReplyAt) continue;
+    const cpool = libTextPool(p.friendId, ['card','kaomoji','emoji']);
+    if(!cpool.length) continue;
     p.pendingReplyAt = 0;
     const f = friendById(p.friendId);
     p.comments = p.comments || [];
     p.comments.push({
       by:'friend', name:(f && f.name) || 'TA',
-      text: pick(['嗯，我也这么觉得。','看到你的评论笑了。','下次一起去吧。','好呀，等我。','被你说中了。','记得早点休息。']),
+      text: pick(cpool),
       at:now
     });
     await dbPut('friendPosts', p);
