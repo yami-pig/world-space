@@ -2553,7 +2553,11 @@ function rollFriendStatus(fm, force){
     if(v && v !== s[k]){ s[k] = v; changed = true; }
   });
   const custom = Number(fm.settings && fm.settings.status && fm.settings.status.every) || 0;
-  s.nextAt = custom > 0 ? Date.now() + custom * 60000 : nextStatusAt();
+  if(custom > 0){
+    s.nextAt = Date.now() + custom * (0.5 + Math.random()) * 60000;
+  }else{
+    s.nextAt = nextStatusAt();
+  }
   return changed;
 }
 function frameClass(which, friendId){
