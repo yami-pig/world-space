@@ -1205,9 +1205,12 @@ const LIB_TYPES = {
   kaomoji:{ label:'颜文字', icon:'i-smile' },
   emoji:  { label:'emoji',  icon:'i-smile' },
   pat:    { label:'拍一拍', icon:'i-hand' },
-  status: { label:'状态',   icon:'i-status' }
+  mood:   { label:'心情',   icon:'i-mood' },
+  status: { label:'状态',   icon:'i-status' },
+  weather:{ label:'天气',   icon:'i-weather' }
 };
-const LIB_ORDER = ['card','sticker','kaomoji','emoji','pat','status'];
+const LIB_ORDER = ['card','sticker','kaomoji','emoji','pat','mood','status','weather'];
+const MSG_LIB_ORDER = ['card','sticker','kaomoji','emoji','pat'];
 
 const FONTS = {
   default: { label:'系统默认', css:'system-ui,-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif' },
@@ -2524,18 +2527,6 @@ function nextStatusAt(){
   const [lo, hi] = STATUS_TTL_MIN;
   return Date.now() + (lo + Math.random() * (hi - lo)) * 60000;
 }
-function rollFriendStatus(fm, force){
-  const s = fm.status;
-  if(!s) return false;
-  const now = Date.now();
-  if(!force && s.mood && s.state && s.weather && s.nextAt && now < s.nextAt) return false;
-  s.mood = randomStatusText(fm.id, 'mood');
-  s.state = randomStatusText(fm.id, 'state');
-  s.weather = randomStatusText(fm.id, 'weather');
-  const custom = Number(fm.settings && fm.settings.status && fm.settings.status.every) || 0;
-  s.nextAt = custom > 0 ? Date.now() + custom * 60000 : nextStatusAt();
-  return true;
-}
 function syncStatusDom(fm){
   const menu = document.querySelector('.friend-menu[data-friend]');
   if(!menu || menu.dataset.friend !== fm.id) return;
@@ -2545,10 +2536,25 @@ function syncStatusDom(fm){
   });
 }
 function randomStatusText(friendId, kind){
-  const pool = friendLibPool(friendId, kind === 'weather' ? ['status'] : ['status','card']).map(x=>x.content).filter(Boolean);
-  const weather = ['晴 · 24℃','多云 · 21℃','小雨 · 18℃','晴转多云 · 26℃','微风 · 20℃','夜里有星 · 17℃'];
-  if(kind === 'weather') return pool.length && Math.random() < 0.45 ? pick(pool) : pick(weather);
-  return pool.length ? pick(pool) : pick(['平静','在想你','有点困','心情不错','忙碌中']);
+  const type = kind === 'mood' ? 'mood' : kind === 'weather' ? 'weather' : 'status';
+  const pool = friendLibPool(friendId, [type]).map(x=>x.content).filter(Boolean);
+  return pool.length ? pick(pool) : '';
+}
+function rollFriendStatus(fm, force){
+  const s = fm.status;
+  if(!s) return false;
+  const kinds = ['mood','state','weather'];
+  if(!kinds.some(k => libTextPool(fm.id, [k]).length)) return false;
+  const now = Date.now();
+  if(!force && s.nextAt && now < s.nextAt) return false;
+  let changed = false;
+  kinds.forEach(k => {
+    const v = randomStatusText(fm.id, k);
+    if(v && v !== s[k]){ s[k] = v; changed = true; }
+  });
+  const custom = Number(fm.settings && fm.settings.status && fm.settings.status.every) || 0;
+  s.nextAt = custom > 0 ? Date.now() + custom * 60000 : nextStatusAt();
+  return changed;
 }
 function frameClass(which, friendId){
   const fm = friendMetaOf(friendId);
@@ -3874,7 +3880,7 @@ async function scheduleReply(chat){
 function openAttachSheet(){
   const chat = chatById(view.id);
   if(!chat) return;
-  const items = LIB_ORDER.map(type => `<button class="attach-item" data-attach="${type}">
+  const items = MSG_LIB_ORDER.map(type => `<button class="attach-item" data-attach="${type}">
       <span class="icon-tile">${icon(LIB_TYPES[type].icon)}</span>
       <span>${LIB_TYPES[type].label}</span>
     </button>`).join('');
