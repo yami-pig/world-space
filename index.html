@@ -812,6 +812,25 @@ html[data-bubble="square"] .msg .bubble{border-radius:8px}
 .call-min{position:absolute;top:calc(12px + env(safe-area-inset-top));left:14px;z-index:3;height:34px;padding:0 12px;border-radius:999px;display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.16);color:#fff;font-size:11.5px;font-weight:600;backdrop-filter:blur(6px)}
 .call-min:hover{background:rgba(255,255,255,.24)}
 .call-min .ic{width:16px;height:16px}
+.call-bg{left:auto;right:14px}
+.call-screen.custom-bg::before{display:none}
+.call-screen.has-img{background-color:#1c1016;background-size:cover;background-position:center}
+.call-screen.has-img::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(14,9,13,.42),rgba(14,9,13,.72));pointer-events:none}
+.callbg-panel{position:fixed;inset:0;z-index:210;display:flex;align-items:flex-end;background:rgba(10,6,10,.5);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:fadeIn .18s ease both}
+.callbg-card{width:100%;background:#fff;color:var(--text);border-radius:24px 24px 0 0;padding:16px 18px calc(20px + env(safe-area-inset-bottom));animation:slideUp .26s cubic-bezier(.2,.9,.2,1) both;max-height:82%;overflow-y:auto}
+.callbg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.callbg-head b{font-size:15.5px;font-weight:730}
+.callbg-head button{font-size:13px;font-weight:650;color:var(--accent);padding:6px 10px;border-radius:9px;background:var(--accent-soft)}
+.callbg-label{font-size:12px;font-weight:650;color:var(--text-3);margin:12px 0 8px}
+.callbg-swatches{display:flex;flex-wrap:wrap;gap:9px}
+.callbg-sw{width:38px;height:38px;border-radius:12px;border:2px solid transparent;box-shadow:0 0 0 1px rgba(0,0,0,.08) inset}
+.callbg-sw.on{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.callbg-custom{position:relative;width:38px;height:38px;border-radius:12px;overflow:hidden;border:2px dashed var(--line-strong);display:flex;align-items:center;justify-content:center;color:var(--text-3)}
+.callbg-custom input{position:absolute;inset:-6px;width:200%;height:200%;opacity:0;cursor:pointer}
+.callbg-row{display:flex;flex-wrap:wrap;gap:8px}
+.mini-call.has-img{background-size:cover;background-position:center;box-shadow:inset 0 0 0 200px rgba(16,9,14,.55),0 14px 40px rgba(40,20,30,.38)}
+.mini-call .bg{width:26px;height:26px;border-radius:9px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;flex:none;color:#fff}
+.mini-call .bg .ic{width:14px;height:14px}
 .mini-call{
   position:fixed;z-index:136;right:14px;bottom:calc(88px + env(safe-area-inset-bottom));
   display:flex;align-items:center;gap:9px;padding:8px 12px 8px 8px;border-radius:18px;max-width:240px;
@@ -1228,6 +1247,7 @@ const DEFAULT_SETTINGS = {
   features:{ quote:true, read:true, typing:true, time:true },
   pace:    { delay:45, autoSend:false, combo:true, video:true },
   display: { patMe:'脑袋', patOther:'肩膀', leavePopup:false },
+  callBg:  { color:'', image:'' },
   welcomeSeen: false,
   lastSeen: 0
 };
@@ -4193,12 +4213,125 @@ function callScreenBase(chat, statusText, actionsHTML, tip=''){
     </div>
     <div class="${actionsHTML.includes('callAnswer') ? 'call-incoming-btns' : 'call-actions'}">${actionsHTML}</div>`;
   document.getElementById('modalRoot').appendChild(wrap);
+  applyCallBg(wrap, null);
+  const bgBtn = document.createElement('button');
+  bgBtn.className = 'call-min call-bg';
+  bgBtn.setAttribute('aria-label','通话背景');
+  bgBtn.innerHTML = icon('i-palette') + '<span>背景</span>';
+  bgBtn.onclick = () => openCallBgPicker(wrap);
+  wrap.appendChild(bgBtn);
   return wrap;
+}
+function applyCallBg(wrap, miniEl){
+  if(!wrap) return;
+  const cb = (settings && settings.callBg) || { color:'', image:'' };
+  const img = cb.image || '';
+  const color = cb.color || '';
+  if(img){
+    wrap.classList.add('has-img');
+    wrap.classList.remove('custom-bg');
+    wrap.style.backgroundImage = `url('${img}')`;
+    wrap.style.backgroundSize = 'cover';
+    wrap.style.backgroundPosition = 'center';
+    wrap.style.background = `url('${img}') center/cover no-repeat`;
+  }else{
+    wrap.classList.remove('has-img');
+    wrap.style.backgroundImage = 'none';
+    if(color){
+      wrap.classList.add('custom-bg');
+      wrap.style.background = color;
+    }else{
+      wrap.classList.remove('custom-bg');
+      wrap.style.background = '';
+    }
+  }
+  if(miniEl){
+    if(img){
+      miniEl.classList.add('has-img');
+      miniEl.style.background = `url('${img}') center/cover no-repeat`;
+    }else{
+      miniEl.classList.remove('has-img');
+      miniEl.style.background = color || '';
+    }
+  }
+}
+function openCallBgPicker(wrap){
+  if(!settings) return;
+  if(!settings.callBg) settings.callBg = { color:'', image:'' };
+  const cb = settings.callBg;
+  if(document.querySelector('.callbg-panel')) return;
+  const PRESETS = ['#1c1016','#3a2330','#4a2c3c','#1e2436','#123028','#3b2a1e','#6b4a5c','#2b2330'];
+  const panel = document.createElement('div');
+  panel.className = 'callbg-panel';
+  panel.innerHTML = `<div class="callbg-card">
+      <div class="callbg-head"><b>通话背景</b><button type="button" data-cbg-close>完成</button></div>
+      <div class="callbg-label">背景颜色</div>
+      <div class="callbg-swatches">
+        ${PRESETS.map(c => `<button type="button" class="callbg-sw ${!cb.image && String(cb.color).toLowerCase()===c?'on':''}" data-cbg-color="${c}" style="background:${c}" aria-label="${c}"></button>`).join('')}
+        <label class="callbg-custom" aria-label="自定义颜色">${icon('i-plus','sm')}<input type="color" id="cbgCustom" value="${esc(cb.color || '#3a2330')}"></label>
+      </div>
+      <div class="callbg-label">自定义壁纸</div>
+      <div class="callbg-row">
+        <button type="button" class="btn tiny ghost" id="cbgPick">${cb.image ? '更换壁纸' : '从相册选择'}</button>
+        ${cb.image ? '<button type="button" class="btn tiny soft" id="cbgClear">移除壁纸</button>' : ''}
+        <button type="button" class="btn tiny soft" id="cbgReset">恢复默认</button>
+      </div>
+      <p class="form-note" style="margin-top:10px">放大和缩小后的通话窗口都会使用同一个背景。</p>
+      <input type="file" id="cbgFile" accept="image/*" hidden>
+    </div>`;
+  document.body.appendChild(panel);
+  const refresh = () => {
+    applyCallBg(wrap, activeCall && activeCall.miniEl);
+    saveSettings();
+  };
+  panel.addEventListener('click', e => {
+    if(e.target === panel) panel.remove();
+  });
+  panel.querySelector('[data-cbg-close]').onclick = () => panel.remove();
+  panel.querySelectorAll('[data-cbg-color]').forEach(b => b.onclick = () => {
+    cb.color = b.dataset.cbgColor;
+    cb.image = '';
+    refresh();
+    panel.querySelectorAll('[data-cbg-color]').forEach(x => x.classList.toggle('on', x === b));
+    const clearBtn = panel.querySelector('#cbgClear');
+    if(clearBtn) clearBtn.remove();
+  });
+  const custom = panel.querySelector('#cbgCustom');
+  custom.oninput = () => {
+    cb.color = custom.value;
+    cb.image = '';
+    refresh();
+    panel.querySelectorAll('[data-cbg-color]').forEach(x => x.classList.remove('on'));
+  };
+  const file = panel.querySelector('#cbgFile');
+  panel.querySelector('#cbgPick').onclick = () => file.click();
+  file.onchange = async e => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!f) return;
+    try{
+      cb.image = await readImageFile(f, 1200);
+      cb.color = '';
+      refresh();
+      panel.remove();
+      openCallBgPicker(wrap);
+      toast('通话背景已更新');
+    }catch(err){ toast('图片读取失败'); }
+  };
+  const clearBtn = panel.querySelector('#cbgClear');
+  if(clearBtn) clearBtn.onclick = () => { cb.image = ''; refresh(); panel.remove(); openCallBgPicker(wrap); };
+  panel.querySelector('#cbgReset').onclick = () => {
+    cb.color = '';
+    cb.image = '';
+    refresh();
+    panel.remove();
+    openCallBgPicker(wrap);
+  };
 }
 function makeMiniDraggable(el, call){
   let sx = 0, sy = 0, ox = 0, oy = 0, dragging = false;
   el.addEventListener('pointerdown', e => {
-    if(e.target.closest('.end')) return;
+    if(e.target.closest('.end') || e.target.closest('.bg')) return;
     const r = el.getBoundingClientRect();
     dragging = true;
     el.dataset.moved = '';
@@ -4238,7 +4371,12 @@ function minimizeCall(call){
   el.className = 'mini-call';
   el.innerHTML = `<img src="${chat.avatar || genAvatar(chat.name)}" alt="">
     <div class="grow"><div class="nm">${esc(chat.name)}</div><div class="tm">通话中 · 00:00</div></div>
+    <button class="bg" aria-label="通话背景">${icon('i-palette')}</button>
     <button class="end" aria-label="挂断">${icon('i-hangup')}</button>`;
+  el.querySelector('.bg').onclick = e => {
+    e.stopPropagation();
+    openCallBgPicker(call.wrap);
+  };
   el.querySelector('.end').onclick = e => {
     e.stopPropagation();
     if(typeof call.onEnd === 'function') call.onEnd();
@@ -4251,6 +4389,7 @@ function minimizeCall(call){
   };
   makeMiniDraggable(el, call);
   call.miniEl = el;
+  applyCallBg(call.wrap, el);
   call.wrap.hidden = true;
   document.body.appendChild(el);
 }
@@ -4258,6 +4397,7 @@ function closeCallMini(call){
   if(call && call.miniEl){ call.miniEl.remove(); call.miniEl = null; }
   if(call && call.wrap) call.wrap.hidden = false;
   document.querySelectorAll('.mini-call').forEach(el => el.remove());
+  document.querySelectorAll('.callbg-panel').forEach(el => el.remove());
 }
 function updateCallMiniText(call, text){
   if(call && call.miniEl){
