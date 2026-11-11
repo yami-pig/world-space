@@ -781,7 +781,7 @@ html[data-bubble="square"] .msg .bubble{border-radius:8px}
 }
 @keyframes toastIn{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
 .menu-list{padding:2px 0 6px}
-.menu-item{display:flex;align-items:center;gap:12px;width:100%;padding:12px 6px;border-radius:10px;font-size:14px;font-weight:550;text-align:left;transition:background .15s}
+.menu-item{display:flex;align-items:center;gap:12px;width:100%;padding:12px 6px;border-radius:10px;font-size:14px;font-weight:550;text-align:left;transition:background .15s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;scroll-margin:0}
 .menu-item:hover{background:rgba(20,35,60,.04)}
 .menu-item .icon-tile{width:34px;height:34px;border-radius:11px}
 .menu-item .icon-tile .ic{width:17px;height:17px}
@@ -2726,6 +2726,15 @@ function updateLibBar(){
   const count = $('.lib-bar .count');
   if(count) count.textContent = `已选 ${ui.librarySel.size} 项`;
 }
+function scrollLibTabsToActive(){
+  const strip = document.querySelector('.lib-tabs');
+  if(!strip) return;
+  const on = strip.querySelector('.on');
+  if(!on) return;
+  requestAnimationFrame(() => {
+    strip.scrollLeft = Math.max(0, on.offsetLeft - (strip.clientWidth - on.offsetWidth) / 2);
+  });
+}
 function toggleLibSelection(id){
   if(ui.librarySel.has(id)) ui.librarySel.delete(id); else ui.librarySel.add(id);
   const el = $(`.lib-item[data-id="${id}"]`);
@@ -3348,6 +3357,7 @@ function bindLibrarySwipe(){
       ui.libraryTab = LIB_ORDER[next];
       ui.librarySel.clear();
       render();
+      scrollLibTabsToActive();
     }
   }, {passive:true});
 }
@@ -6632,6 +6642,7 @@ document.addEventListener('click', async e => {
       ui.libraryTab = trigger.dataset.type;
       ui.librarySel.clear();
       render();
+      scrollLibTabsToActive();
       break;
     case 'lib-item':
       if(ui.libraryManage) toggleLibSelection(id);
@@ -6665,6 +6676,7 @@ document.addEventListener('click', async e => {
       ui.plibType = trigger.dataset.type;
       ui.plibSel.clear();
       render();
+      scrollLibTabsToActive();
       break;
     case 'plib-item':
       if(ui.plibManage) togglePlibSelection(id);
