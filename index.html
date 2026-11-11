@@ -1775,8 +1775,7 @@ function libTextPool(friendId, types){
 }
 function composeFromPool(friendId, min, max, types, opts={}){
   const pool = libTextPool(friendId, types);
-  const fallback = FRIEND_SENTENCES.slice();
-  const src = pool.length ? pool.concat(fallback.slice(0, 10)) : fallback;
+  const src = pool.length ? pool : FRIEND_SENTENCES.slice();
   const n = min + Math.floor(Math.random() * (max - min + 1));
   const out = [];
   for(let i=0;i<n;i++){
