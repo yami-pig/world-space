@@ -2463,8 +2463,6 @@ function openFriendDetail(id){
         ${friendPanelRow('couple','i-couple','情侣空间','在一起 ' + daysTogether(fm.couple.startAt) + ' 天')}
         ${friendPanelRow('chatSettings','i-sliders','聊天设置','只对这个好友生效')}
         ${friendPanelRow('moments','i-images','朋友圈',friendPosts.filter(x=>x.friendId===f.id&&x.kind==='moment').length + ' 条')}
-        ${friendPanelRow('diary','i-file','日记',friendPosts.filter(x=>x.friendId===f.id&&x.kind==='diary').length + ' 篇')}
-        ${friendPanelRow('letters','i-mail','信封','我写的信 · 他的回信')}
       </div>
       <div class="menu-list" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
         <button class="menu-item" data-do="chat"><span class="icon-tile">${icon('i-chat')}</span><span class="grow">发消息</span>${icon('i-right','chev')}</button>
@@ -2481,8 +2479,6 @@ function openFriendDetail(id){
           if(key === 'couple') openCouplePanel(f.id);
           else if(key === 'chatSettings') openFriendChatSettings(f.id);
           else if(key === 'moments') openFriendPosts(f.id, 'moment');
-          else if(key === 'diary') openFriendPosts(f.id, 'diary');
-          else if(key === 'letters') openLetterCenter(f.id);
         }, 70);
       });
       el.querySelector('[data-do="chat"]').onclick = async () => {
@@ -5176,6 +5172,28 @@ function autoAnswerQuestion(q){
 /* =========================================================
    信封
    ========================================================= */
+function openFriendPick(title, hint, cb){
+  const list = friends.slice();
+  openSheet({
+    title,
+    body:`<p class="form-note">${hint}</p>
+      ${list.length ? `<div class="menu">${list.map(f => `
+        <button class="menu-item" type="button" data-pick-friend="${f.id}">
+          <img class="avatar sm round" src="${f.avatar || genAvatar(f.name)}" alt="">
+          <span class="grow">${esc(f.name)}</span>
+          ${icon('i-right','chev')}
+        </button>`).join('')}</div>`
+      : `<div class="lib-empty" style="padding:26px">还没有好友，先去「联系人」添加吧</div>`}`,
+    footer:`<button class="btn soft" type="button" data-close>取消</button>`,
+    onMount(el, close){
+      el.querySelectorAll('[data-pick-friend]').forEach(b => b.onclick = () => {
+        const f = friendById(b.dataset.pickFriend);
+        close();
+        if(f) setTimeout(() => cb(f), 60);
+      });
+    }
+  });
+}
 let letterView = { friendId:null, tab:'out' };
 function letterTabItems(friendId, tab){
   const list = letters.filter(x => x.friendId === friendId);
@@ -5889,6 +5907,22 @@ function renderMePage(){
         <div class="grow">
           <div class="row-title">日记</div>
           <div class="row-desc">${diaries.length ? `${diaries.length} 篇日记 · 好友会来回复` : '写下今天的心情'}</div>
+        </div>
+        ${icon('i-right','chev')}
+      </div>
+      <div class="row tappable" data-act="letter-pick" role="button" tabindex="0">
+        <div class="icon-tile">${icon('i-mail')}</div>
+        <div class="grow">
+          <div class="row-title">信封</div>
+          <div class="row-desc">${letters.length ? `${letters.length} 封信 · 我写的信与他的回信` : '给他写一封信'}</div>
+        </div>
+        ${icon('i-right','chev')}
+      </div>
+      <div class="row tappable" data-act="friend-diary-pick" role="button" tabindex="0">
+        <div class="icon-tile t2">${icon('i-file')}</div>
+        <div class="grow">
+          <div class="row-title">他的日记</div>
+          <div class="row-desc">${friendPosts.filter(x=>x.kind==='diary').length ? '看看好友写下的日记' : '好友的日记会出现在这里'}</div>
         </div>
         ${icon('i-right','chev')}
       </div>
@@ -6614,6 +6648,12 @@ document.addEventListener('click', async e => {
       break;
     case 'diary-add':
       openDiaryForm();
+      break;
+    case 'letter-pick':
+      openFriendPick('信封 · 选择好友', '选择一位好友，打开你们之间的信封。', f => openLetterCenter(f.id));
+      break;
+    case 'friend-diary-pick':
+      openFriendPick('他的日记 · 选择好友', '选择一位好友，看看 TA 写下的日记。', f => openFriendPosts(f.id, 'diary'));
       break;
     case 'diary-edit':
       openDiaryForm(diaries.find(x => x.id === id) || null);
