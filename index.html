@@ -2473,7 +2473,7 @@ function openFriendDetail(id){
         ${friendPanelRow('mood','i-mood','心情',fm.status.mood,false)}
         ${friendPanelRow('state','i-status','状态',fm.status.state,false)}
         ${friendPanelRow('weather','i-weather','天气',fm.status.weather,false)}
-        ${friendPanelRow('couple','i-couple','情侣空间','在一起 ' + daysTogether(fm.couple.startAt) + ' 天')}
+        ${isLoverFriend(f.id) ? friendPanelRow('couple','i-couple','情侣空间','在一起 ' + daysTogether(fm.couple.startAt) + ' 天') : ''}
         ${friendPanelRow('chatSettings','i-sliders','聊天设置','只对这个好友生效')}
         ${friendPanelRow('moments','i-images','朋友圈',friendPosts.filter(x=>x.friendId===f.id&&x.kind==='moment').length + ' 条')}
       </div>
@@ -2564,6 +2564,13 @@ function frameClass(which, friendId){
   const fm = friendMetaOf(friendId);
   const key = which === 'me' ? fm.chatTheme.myFrame : fm.chatTheme.otherFrame;
   return (!key || key === 'none') ? 'avatar' : 'avatar frame-' + key;
+}
+function isLoverFriend(friendId){
+  const f = friendById(friendId);
+  if(!f) return false;
+  const g = friendGroups.find(x => x.id === f.groupId);
+  const n = (g?.name || '').trim();
+  return n.includes('爱人') || n.includes('情侣');
 }
 
 function openGroupDetail(id){
