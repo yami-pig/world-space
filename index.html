@@ -4318,8 +4318,6 @@ function startVideoCall(chat){
     if(statusEl()) statusEl().textContent = '通话中 · 00:00';
     const tipEl = wrap.querySelector('#callTip');
     if(tipEl) tipEl.remove();
-    const ft = setTimeout(() => finish('peer-ended'), 14000 + Math.random()*26000);
-    timers.push(ft);
   };
   const outcome = setTimeout(() => {
     const r = Math.random();
@@ -4400,7 +4398,6 @@ function incomingCall(chat){
       if(statusEl()) statusEl().textContent = txt;
       updateCallMiniText(activeCall, txt);
     }, 1000);
-    timers.push(setTimeout(() => finish('peer-ended'), 15000 + Math.random()*25000));
   };
   wrap.querySelector('#callAnswer').onclick = connect;
   wrap.querySelector('#callReject').onclick = () => finish('rejected');
