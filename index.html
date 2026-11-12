@@ -4448,6 +4448,64 @@ function callMinBtn(call){
   call.wrap.appendChild(btn);
   return btn;
 }
+/* ---------- 通话状态持久化（刷新后可恢复） ---------- */
+const CALL_STATE_KEY = 'world_active_call_v1';
+function saveCallState(obj){ try{ localStorage.setItem(CALL_STATE_KEY, JSON.stringify(obj)); }catch(_){} }
+function clearCallState(){ try{ localStorage.removeItem(CALL_STATE_KEY); }catch(_){} }
+function loadCallState(){ try{ return JSON.parse(localStorage.getItem(CALL_STATE_KEY) || 'null'); }catch(_){ return null; } }
+function resumeCallIfAny(){
+  if(activeCall) return;
+  const saved = loadCallState();
+  if(!saved || !saved.chatId || !saved.startedAt) return clearCallState();
+  const chat = chatById(saved.chatId);
+  const gap = Date.now() - (Number(saved.at) || 0);
+  if(!chat || gap > 30 * 60 * 1000) return clearCallState();
+  const timers = [];
+  let sec = Math.max(0, Math.floor((Date.now() - Number(saved.startedAt)) / 1000));
+  const fmtText = () => `通话中 · ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
+  const wrap = callScreenBase(chat, fmtText(),
+    `<button class="call-btn" id="callMute" aria-label="静音">${icon('i-mic')}</button>
+     <button class="call-btn" id="callCam" aria-label="摄像头">${icon('i-video')}</button>
+     <button class="call-btn hang" id="callHang" aria-label="挂断">${icon('i-hangup')}</button>`);
+  activeCall = { chat, wrap, timers };
+  callMinBtn(activeCall);
+  const statusEl = () => wrap.querySelector('#callStatus');
+  let closed = false;
+  const heartbeat = () => saveCallState({ chatId: chat.id, startedAt: Number(saved.startedAt), at: Date.now() });
+  const timer = setInterval(() => {
+    if(closed) return;
+    sec++;
+    const t = fmtText();
+    if(statusEl()) statusEl().textContent = t;
+    updateCallMiniText(activeCall, t);
+    if(sec % 5 === 0) heartbeat();
+  }, 1000);
+  const finish = async () => {
+    if(closed) return;
+    closed = true;
+    clearInterval(timer);
+    timers.forEach(t => clearTimeout(t));
+    closeCallMini(activeCall);
+    wrap.remove();
+    activeCall = null;
+    clearCallState();
+    if(chatById(chat.id)) await pushSystemMessage(chat, `通话结束 · 时长 ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`);
+  };
+  activeCall.onEnd = finish;
+  wrap.querySelector('#callHang').onclick = finish;
+  let muted = false;
+  wrap.querySelector('#callMute').onclick = e => { muted = !muted; e.currentTarget.classList.toggle('off', muted); };
+  let camOff = false;
+  wrap.querySelector('#callCam').onclick = e => {
+    camOff = !camOff;
+    e.currentTarget.classList.toggle('off', camOff);
+    e.currentTarget.innerHTML = icon(camOff ? 'i-camera-off' : 'i-video');
+    const av = wrap.querySelector('.call-avatar-wrap img');
+    if(av) av.style.opacity = camOff ? '.28' : '1';
+  };
+  minimizeCall(activeCall);
+  updateCallMiniText(activeCall, fmtText());
+}
 function startVideoCall(chat){
   if(!chat) return;
   if(activeCall){ toast('正在通话中'); return; }
@@ -4457,7 +4515,7 @@ function startVideoCall(chat){
      <button class="call-btn hang" id="callHang" aria-label="挂断">${icon('i-hangup')}</button>`,
     '视频通话 · 等待对方接听');
   const timers = [];
-  let sec = 0, connected = false, closed = false;
+  let sec = 0, connected = false, closed = false, callStartedAt = 0;
   activeCall = { chat, wrap, timers };
   const minBtn = callMinBtn(activeCall);
   const statusEl = () => wrap.querySelector('#callStatus');
@@ -4468,6 +4526,7 @@ function startVideoCall(chat){
     const txt = `通话中 · ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
     if(statusEl()) statusEl().textContent = txt;
     updateCallMiniText(activeCall, txt);
+    if(sec % 5 === 0) saveCallState({ chatId: chat.id, startedAt: callStartedAt, at: Date.now() });
   }, 1000);
   const finish = async (reason) => {
     if(closed) return;
@@ -4476,6 +4535,7 @@ function startVideoCall(chat){
     closeCallMini(activeCall);
     wrap.remove();
     activeCall = null;
+    clearCallState();
     let text = '';
     if(reason === 'declined') text = '对方已拒绝通话';
     else if(reason === 'noanswer') text = '对方无应答';
@@ -4488,6 +4548,8 @@ function startVideoCall(chat){
   const connect = () => {
     if(closed) return;
     connected = true;
+    callStartedAt = Date.now();
+    saveCallState({ chatId: chat.id, startedAt: callStartedAt, at: callStartedAt });
     activeCall.onEnd = () => finish('ended');
     if(statusEl()) statusEl().textContent = '通话中 · 00:00';
     const tipEl = wrap.querySelector('#callTip');
@@ -4522,7 +4584,7 @@ function incomingCall(chat){
      <button class="call-btn answer" id="callAnswer" aria-label="接听">${icon('i-phone')}</button>`,
     '他正在等你接听');
   const timers = [];
-  let connected = false, closed = false, sec = 0;
+  let connected = false, closed = false, sec = 0, callStartedAt = 0;
   activeCall = { chat, wrap, timers };
   const minBtn = callMinBtn(activeCall);
   const statusEl = () => wrap.querySelector('#callStatus');
@@ -4535,6 +4597,7 @@ function incomingCall(chat){
     closeCallMini(activeCall);
     wrap.remove();
     activeCall = null;
+    clearCallState();
     let text = '';
     if(reason === 'rejected') text = '你拒绝了这次通话';
     else if(reason === 'missed') text = '未接来电 · 对方挂断了';
@@ -4546,6 +4609,8 @@ function incomingCall(chat){
   const connect = () => {
     if(closed) return;
     connected = true;
+    callStartedAt = Date.now();
+    saveCallState({ chatId: chat.id, startedAt: callStartedAt, at: callStartedAt });
     activeCall.onEnd = () => finish('ended');
     const tipEl = wrap.querySelector('#callTip');
     if(tipEl) tipEl.remove();
@@ -4571,6 +4636,7 @@ function incomingCall(chat){
       const txt = `通话中 · ${pad2(Math.floor(sec/60))}:${pad2(sec%60)}`;
       if(statusEl()) statusEl().textContent = txt;
       updateCallMiniText(activeCall, txt);
+      if(sec % 5 === 0) saveCallState({ chatId: chat.id, startedAt: callStartedAt, at: Date.now() });
     }, 1000);
   };
   wrap.querySelector('#callAnswer').onclick = connect;
@@ -7261,6 +7327,8 @@ async function boot(){
     settings.lastSeen = Date.now();
     saveSettings();
   }
+
+  setTimeout(resumeCallIfAny, 600);
 
   window.addEventListener('beforeunload', e => {
     if(settings && settings.display.leavePopup){
