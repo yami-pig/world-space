@@ -1245,7 +1245,7 @@ const DEFAULT_SETTINGS = {
   key: 'settings',
   theme:  { bg:'#fdf0f5', me:'#dd6b9b', other:'#ffffff', font:'default', bubble:'tail' },
   features:{ quote:true, read:true, typing:true, time:true },
-  pace:    { delay:45, count:2, autoSend:false, combo:true, video:true },
+  pace:    { delayMin:30, delayMax:60, count:2, autoSend:false, combo:true, video:true },
   display: { patMe:'脑袋', patOther:'肩膀', leavePopup:false },
   callBg:  { color:'', image:'' },
   welcomeSeen: false,
@@ -3030,10 +3030,17 @@ function renderChatSettingsPage(){
       <div class="card-desc">让对话按照你喜欢的速度发生。</div>
       <div style="margin-top:16px">
         <div class="switch-title" style="margin-bottom:9px">对方回复快慢（秒）</div>
-        <div class="field" style="margin:0">
-          <input class="input" type="number" inputmode="numeric" min="1" max="3600" step="1" value="${settings.pace.delay}" data-input="delay" placeholder="例如：30">
+        <div style="display:flex;gap:10px">
+          <div class="field" style="margin:0;flex:1">
+            <label>最快</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="3600" step="1" value="${settings.pace.delayMin}" data-input="delayMin" placeholder="例如：10">
+          </div>
+          <div class="field" style="margin:0;flex:1">
+            <label>最慢</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="3600" step="1" value="${settings.pace.delayMax}" data-input="delayMax" placeholder="例如：60">
+          </div>
         </div>
-        <div class="switch-desc" style="margin-top:6px">发送消息后，对方会在这个秒数后开始回复。</div>
+        <div class="switch-desc" style="margin-top:6px">发送消息后，对方会在最快与最慢秒数之间随机一个时间回复。</div>
       </div>
       <div style="margin-top:16px">
         <div class="switch-title" style="margin-bottom:9px">对方回复条数</div>
@@ -3918,7 +3925,10 @@ async function sendChatMessage(chat, payload){
 async function scheduleReply(chat){
   if(chat.pendingReplyAt) return;
   const cfg = chatCfg(chat);
-  chat.pendingReplyAt = Date.now() + Math.max(1, Number(cfg.pace.delay) || 45) * 1000;
+  const a = Math.max(1, Math.min(3600, Number(cfg.pace.delayMin) || 30));
+  const b = Math.max(a, Math.min(3600, Number(cfg.pace.delayMax) || a));
+  const sec = a + Math.random() * (b - a);
+  chat.pendingReplyAt = Date.now() + Math.round(sec) * 1000;
   await saveChat(chat);
 }
 
@@ -5743,13 +5753,18 @@ function openFriendChatSettings(friendId){
       </div>
       <div class="friend-set-title">节奏</div>
       <div class="card card-pad" style="box-shadow:none;background:rgba(20,35,60,.025)">
-        <div class="field"><label>对方回复快慢（秒）</label>
-          <input class="input" type="number" inputmode="numeric" min="1" max="3600" step="1" data-fs="pace.delay" value="${esc(String(cfg.pace.delay))}" placeholder="例如：30">
+        <div style="display:flex;gap:10px">
+          <div class="field" style="margin:0;flex:1"><label>最快回复（秒）</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="3600" step="1" data-fs="pace.delayMin" value="${esc(String(cfg.pace.delayMin))}" placeholder="例如：10">
+          </div>
+          <div class="field" style="margin:0;flex:1"><label>最慢回复（秒）</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="3600" step="1" data-fs="pace.delayMax" value="${esc(String(cfg.pace.delayMax))}" placeholder="例如：60">
+          </div>
         </div>
         <div class="field"><label>对方回复条数</label>
           <input class="input" type="number" inputmode="numeric" min="1" max="10" step="1" data-fs="pace.count" value="${esc(String(cfg.pace.count || 1))}" placeholder="1–10">
         </div>
-        <p class="form-note">秒数表示 TA 收到消息后隔多久回；条数表示一次连续发几条。</p>
+        <p class="form-note">TA 会在最快与最慢秒数之间随机一个时间回复；条数表示一次连续发几条。</p>
         ${sw('pace.autoSend','对方主动发送','TA 会偶尔主动找你。', cfg.pace.autoSend)}
         ${sw('pace.video','允许对方发起通话','关闭后 TA 不会主动打来。', cfg.pace.video)}
       </div>
@@ -5770,10 +5785,13 @@ function openFriendChatSettings(friendId){
       const saveField = async (input) => {
         const path = input.dataset.fs.split('.');
         let value = input.type === 'checkbox' ? input.checked : input.value;
-        if(path[1] === 'delay' && path[0] === 'pace'){
+        if(path[1] === 'delayMin' || path[1] === 'delayMax'){
           const n = Number(value);
-          value = Number.isFinite(n) ? Math.min(3600, Math.max(1, Math.round(n))) : 45;
+          value = Number.isFinite(n) && input.value !== '' ? Math.min(3600, Math.max(1, Math.round(n))) : (path[1] === 'delayMin' ? 30 : 60);
           input.value = value;
+          if(!fm.settings.pace) fm.settings.pace = {};
+          if(path[1] === 'delayMin' && Number(fm.settings.pace.delayMax || 0) < value) fm.settings.pace.delayMax = value;
+          if(path[1] === 'delayMax' && Number(fm.settings.pace.delayMin || 0) > value) fm.settings.pace.delayMin = value;
         }
         if(path[1] === 'count' && path[0] === 'pace'){
           const n = Number(value);
@@ -7083,9 +7101,11 @@ document.addEventListener('input', e => {
   if(key === 'conv-search'){
     ui.messagesFilter = el.value;
     refreshConvList();
-  }else if(key === 'delay'){
+  }else if(key === 'delayMin' || key === 'delayMax'){
     const v = Number(el.value);
-    settings.pace.delay = Number.isFinite(v) ? Math.min(3600, Math.max(1, Math.round(v))) : 45;
+    const n = Number.isFinite(v) && el.value !== '' ? Math.min(3600, Math.max(1, Math.round(v))) : (key === 'delayMin' ? 30 : 60);
+    settings.pace[key] = n;
+    if(settings.pace.delayMax < settings.pace.delayMin) settings.pace.delayMax = settings.pace.delayMin;
     saveSettings();
   }else if(key === 'count'){
     const v = Number(el.value);
