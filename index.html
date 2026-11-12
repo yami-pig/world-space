@@ -1245,7 +1245,7 @@ const DEFAULT_SETTINGS = {
   key: 'settings',
   theme:  { bg:'#fdf0f5', me:'#dd6b9b', other:'#ffffff', font:'default', bubble:'tail' },
   features:{ quote:true, read:true, typing:true, time:true },
-  pace:    { delayMin:30, delayMax:60, count:2, autoSend:false, combo:true, video:true },
+  pace:    { delayMin:30, delayMax:60, count:2, autoMin:1, autoMax:3, autoSend:false, combo:true, video:true },
   display: { patMe:'脑袋', patOther:'肩膀', leavePopup:false },
   callBg:  { color:'', image:'' },
   welcomeSeen: false,
@@ -3051,6 +3051,17 @@ function renderChatSettingsPage(){
       </div>
       <div style="margin-top:10px">
         ${switchRow('对方主动发送','开启后，朋友会偶尔主动找你聊天。', settings.pace.autoSend, 'pace', 'autoSend')}
+        <div style="display:flex;gap:10px;margin-top:10px" id="autoCountRow">
+          <div class="field" style="margin:0;flex:1">
+            <label>主动发送最少条数</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="10" step="1" value="${settings.pace.autoMin}" data-input="autoMin" placeholder="例如：1">
+          </div>
+          <div class="field" style="margin:0;flex:1">
+            <label>主动发送最多条数</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="10" step="1" value="${settings.pace.autoMax}" data-input="autoMax" placeholder="例如：3">
+          </div>
+        </div>
+        <div class="switch-desc" style="margin-top:6px">TA 主动找你时，会在这个条数区间内随机发几条。</div>
         ${switchRow('允许视频通话','在聊天顶部显示视频通话入口（模拟通话）。', settings.pace.video, 'pace', 'video')}
       </div>
     </div>
@@ -4154,10 +4165,18 @@ async function deliverSpontaneous(chat){
   replyLocks.add(chat.id);
   try{
     if(!chatById(chat.id)) return;
+    const cfg = chatCfg(chat);
     const pool = replyPool(chat);
-    const item = pick(pool);
-    if(!item) return;
-    await receiveFriendMessage(chat, replySenderId(chat), item);
+    if(!pool.length) return;
+    const a = Math.max(1, Math.min(10, Number(cfg.pace.autoMin) || 1));
+    const b = Math.max(a, Math.min(10, Number(cfg.pace.autoMax) || a));
+    const count = a + Math.floor(Math.random() * (b - a + 1));
+    for(let i=0;i<count;i++){
+      const item = pick(pool);
+      if(!item) return;
+      await receiveFriendMessage(chat, replySenderId(chat), item);
+      if(i < count-1) await sleep(680);
+    }
     const changed = await markMyMessagesRead(chat.id);
     if(changed) await refreshChat(false);
   }finally{
@@ -5766,6 +5785,14 @@ function openFriendChatSettings(friendId){
         </div>
         <p class="form-note">TA 会在最快与最慢秒数之间随机一个时间回复；条数表示一次连续发几条。</p>
         ${sw('pace.autoSend','对方主动发送','TA 会偶尔主动找你。', cfg.pace.autoSend)}
+        <div style="display:flex;gap:10px">
+          <div class="field" style="margin:0;flex:1"><label>主动发送最少条数</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="10" step="1" data-fs="pace.autoMin" value="${esc(String(cfg.pace.autoMin || 1))}" placeholder="1">
+          </div>
+          <div class="field" style="margin:0;flex:1"><label>主动发送最多条数</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="10" step="1" data-fs="pace.autoMax" value="${esc(String(cfg.pace.autoMax || 1))}" placeholder="1–10">
+          </div>
+        </div>
         ${sw('pace.video','允许对方发起通话','关闭后 TA 不会主动打来。', cfg.pace.video)}
       </div>
       <div class="friend-set-title">状态</div>
@@ -5792,6 +5819,14 @@ function openFriendChatSettings(friendId){
           if(!fm.settings.pace) fm.settings.pace = {};
           if(path[1] === 'delayMin' && Number(fm.settings.pace.delayMax || 0) < value) fm.settings.pace.delayMax = value;
           if(path[1] === 'delayMax' && Number(fm.settings.pace.delayMin || 0) > value) fm.settings.pace.delayMin = value;
+        }
+        if(path[1] === 'autoMin' || path[1] === 'autoMax'){
+          const n = Number(value);
+          value = Number.isFinite(n) && input.value !== '' ? Math.min(10, Math.max(1, Math.round(n))) : 1;
+          input.value = value;
+          if(!fm.settings.pace) fm.settings.pace = {};
+          if(path[1] === 'autoMin' && Number(fm.settings.pace.autoMax || 0) < value) fm.settings.pace.autoMax = value;
+          if(path[1] === 'autoMax' && Number(fm.settings.pace.autoMin || 0) > value) fm.settings.pace.autoMin = value;
         }
         if(path[1] === 'count' && path[0] === 'pace'){
           const n = Number(value);
@@ -7106,6 +7141,12 @@ document.addEventListener('input', e => {
     const n = Number.isFinite(v) && el.value !== '' ? Math.min(3600, Math.max(1, Math.round(v))) : (key === 'delayMin' ? 30 : 60);
     settings.pace[key] = n;
     if(settings.pace.delayMax < settings.pace.delayMin) settings.pace.delayMax = settings.pace.delayMin;
+    saveSettings();
+  }else if(key === 'autoMin' || key === 'autoMax'){
+    const v = Number(el.value);
+    const n = Number.isFinite(v) && el.value !== '' ? Math.min(10, Math.max(1, Math.round(v))) : 1;
+    settings.pace[key] = n;
+    if(settings.pace.autoMax < settings.pace.autoMin) settings.pace.autoMax = settings.pace.autoMin;
     saveSettings();
   }else if(key === 'count'){
     const v = Number(el.value);
