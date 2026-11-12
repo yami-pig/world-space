@@ -1245,7 +1245,7 @@ const DEFAULT_SETTINGS = {
   key: 'settings',
   theme:  { bg:'#fdf0f5', me:'#dd6b9b', other:'#ffffff', font:'default', bubble:'tail' },
   features:{ quote:true, read:true, typing:true, time:true },
-  pace:    { delay:45, autoSend:false, combo:true, video:true },
+  pace:    { delay:45, count:2, autoSend:false, combo:true, video:true },
   display: { patMe:'脑袋', patOther:'肩膀', leavePopup:false },
   callBg:  { color:'', image:'' },
   welcomeSeen: false,
@@ -3029,16 +3029,21 @@ function renderChatSettingsPage(){
       <div class="card-title">节奏</div>
       <div class="card-desc">让对话按照你喜欢的速度发生。</div>
       <div style="margin-top:16px">
-        <div class="switch-title" style="margin-bottom:9px">对方回复时间</div>
-        <div class="range-wrap">
-          <input type="range" min="30" max="120" step="5" value="${settings.pace.delay}" data-input="delay">
-          <span class="range-val" id="delayVal">${settings.pace.delay} 秒</span>
+        <div class="switch-title" style="margin-bottom:9px">对方回复快慢（秒）</div>
+        <div class="field" style="margin:0">
+          <input class="input" type="number" inputmode="numeric" min="1" max="3600" step="1" value="${settings.pace.delay}" data-input="delay" placeholder="例如：30">
         </div>
-        <div class="switch-desc" style="margin-top:6px">发送消息后，对方会在这段时间末尾回复。</div>
+        <div class="switch-desc" style="margin-top:6px">发送消息后，对方会在这个秒数后开始回复。</div>
+      </div>
+      <div style="margin-top:16px">
+        <div class="switch-title" style="margin-bottom:9px">对方回复条数</div>
+        <div class="field" style="margin:0">
+          <input class="input" type="number" inputmode="numeric" min="1" max="10" step="1" value="${settings.pace.count}" data-input="count" placeholder="例如：2">
+        </div>
+        <div class="switch-desc" style="margin-top:6px">每次回复连续发几条词条消息（1–10 条）。</div>
       </div>
       <div style="margin-top:10px">
         ${switchRow('对方主动发送','开启后，朋友会偶尔主动找你聊天。', settings.pace.autoSend, 'pace', 'autoSend')}
-        ${switchRow('组合发送消息','对方一次可能连发 1–3 条字卡、颜文字或 emoji。', settings.pace.combo, 'pace', 'combo')}
         ${switchRow('允许视频通话','在聊天顶部显示视频通话入口（模拟通话）。', settings.pace.video, 'pace', 'video')}
       </div>
     </div>
@@ -3913,7 +3918,7 @@ async function sendChatMessage(chat, payload){
 async function scheduleReply(chat){
   if(chat.pendingReplyAt) return;
   const cfg = chatCfg(chat);
-  chat.pendingReplyAt = Date.now() + Math.max(30, Number(cfg.pace.delay) || 45) * 1000;
+  chat.pendingReplyAt = Date.now() + Math.max(1, Number(cfg.pace.delay) || 45) * 1000;
   await saveChat(chat);
 }
 
@@ -4119,7 +4124,7 @@ async function deliverAutoReply(chat){
   try{
     const cfg = chatCfg(chat);
     const pool = replyPool(chat);
-    const count = cfg.pace.combo ? 1 + Math.floor(Math.random()*3) : 1;
+    const count = Math.min(10, Math.max(1, Number(cfg.pace.count) || 1));
     for(let i=0;i<count;i++){
       if(!chatById(chat.id)) return;
       const item = pick(pool);
@@ -5738,10 +5743,14 @@ function openFriendChatSettings(friendId){
       </div>
       <div class="friend-set-title">节奏</div>
       <div class="card card-pad" style="box-shadow:none;background:rgba(20,35,60,.025)">
-        <div class="switch-title" style="margin-bottom:8px">对方回复时间</div>
-        <div class="range-wrap"><input type="range" min="30" max="120" step="5" value="${cfg.pace.delay}" data-fs="pace.delay"><span class="range-val" data-fsval>${cfg.pace.delay} 秒</span></div>
+        <div class="field"><label>对方回复快慢（秒）</label>
+          <input class="input" type="number" inputmode="numeric" min="1" max="3600" step="1" data-fs="pace.delay" value="${esc(String(cfg.pace.delay))}" placeholder="例如：30">
+        </div>
+        <div class="field"><label>对方回复条数</label>
+          <input class="input" type="number" inputmode="numeric" min="1" max="10" step="1" data-fs="pace.count" value="${esc(String(cfg.pace.count || 1))}" placeholder="1–10">
+        </div>
+        <p class="form-note">秒数表示 TA 收到消息后隔多久回；条数表示一次连续发几条。</p>
         ${sw('pace.autoSend','对方主动发送','TA 会偶尔主动找你。', cfg.pace.autoSend)}
-        ${sw('pace.combo','组合发送消息','一次可能连发 1–3 条。', cfg.pace.combo)}
         ${sw('pace.video','允许对方发起通话','关闭后 TA 不会主动打来。', cfg.pace.video)}
       </div>
       <div class="friend-set-title">状态</div>
@@ -5761,7 +5770,16 @@ function openFriendChatSettings(friendId){
       const saveField = async (input) => {
         const path = input.dataset.fs.split('.');
         let value = input.type === 'checkbox' ? input.checked : input.value;
-        if(path[1] === 'delay') value = Number(value);
+        if(path[1] === 'delay' && path[0] === 'pace'){
+          const n = Number(value);
+          value = Number.isFinite(n) ? Math.min(3600, Math.max(1, Math.round(n))) : 45;
+          input.value = value;
+        }
+        if(path[1] === 'count' && path[0] === 'pace'){
+          const n = Number(value);
+          value = Number.isFinite(n) ? Math.min(10, Math.max(1, Math.round(n))) : 1;
+          input.value = value;
+        }
         if(path[0] === 'status' && path[1] === 'every'){
           const mins = Number(value) || 0;
           value = mins > 0 ? Math.min(1440, Math.max(1, Math.round(mins))) : '';
@@ -7066,9 +7084,12 @@ document.addEventListener('input', e => {
     ui.messagesFilter = el.value;
     refreshConvList();
   }else if(key === 'delay'){
-    settings.pace.delay = Number(el.value);
-    const val = $('#delayVal');
-    if(val) val.textContent = `${el.value} 秒`;
+    const v = Number(el.value);
+    settings.pace.delay = Number.isFinite(v) ? Math.min(3600, Math.max(1, Math.round(v))) : 45;
+    saveSettings();
+  }else if(key === 'count'){
+    const v = Number(el.value);
+    settings.pace.count = Number.isFinite(v) ? Math.min(10, Math.max(1, Math.round(v))) : 1;
     saveSettings();
   }else if(key === 'theme-custom'){
     const target = el.dataset.target;
