@@ -3971,6 +3971,13 @@ async function sendChatMessage(chat, payload){
 }
 
 async function scheduleReply(chat){
+  // 对方先「已读」我发的消息，再进入随机延迟等待回复
+  const readChanged = await markMyMessagesRead(chat.id);
+  if(readChanged){
+    invalidateMessages(chat.id);
+    await refreshChat(false);
+    if(view.name === 'messages') refreshConvList();
+  }
   if(chat.pendingReplyAt) return;
   const cfg = chatCfg(chat);
   const a = Math.max(1, Math.min(3600, Number(cfg.pace.delayMin) || 30));
