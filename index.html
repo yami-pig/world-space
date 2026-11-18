@@ -1258,7 +1258,7 @@ const DEFAULT_SETTINGS = {
   key: 'settings',
   theme:  { bg:'#fdf0f5', me:'#dd6b9b', other:'#ffffff', font:'default', bubble:'tail' },
   features:{ quote:true, read:true, typing:true, time:true },
-  pace:    { delayMin:30, delayMax:60, count:2, autoMin:1, autoMax:3, autoSend:false, combo:true, video:true },
+  pace:    { delayMin:30, delayMax:60, count:2, autoMin:1, autoMax:3, autoSend:false, combo:true, video:true, autoMoney:true, moneyMinH:2, moneyMaxH:8 },
   display: { patMe:'脑袋', patOther:'肩膀', leavePopup:false },
   callBg:  { color:'', image:'' },
   welcomeSeen: false,
@@ -3079,6 +3079,18 @@ function renderChatSettingsPage(){
         </div>
         <div class="switch-desc" style="margin-top:6px">TA 主动找你时，会在这个条数区间内随机发几条。</div>
         ${switchRow('允许视频通话','在聊天顶部显示视频通话入口（模拟通话）。', settings.pace.video, 'pace', 'video')}
+        <div style="margin-top:14px">${switchRow('对方随机转账','开启后，朋友会在随机时间主动给你转一笔随机金额。', settings.pace.autoMoney !== false, 'pace', 'autoMoney')}</div>
+        <div style="display:flex;gap:10px;margin-top:10px" id="moneyRangeRow">
+          <div class="field" style="margin:0;flex:1">
+            <label>最短间隔（小时）</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="720" step="1" value="${settings.pace.moneyMinH || 2}" data-input="moneyMinH" placeholder="例如：2">
+          </div>
+          <div class="field" style="margin:0;flex:1">
+            <label>最长间隔（小时）</label>
+            <input class="input" type="number" inputmode="numeric" min="1" max="720" step="1" value="${settings.pace.moneyMaxH || 8}" data-input="moneyMaxH" placeholder="例如：8">
+          </div>
+        </div>
+        <div class="switch-desc" style="margin-top:6px">每隔「最短–最长」小时之间的随机时间，TA 会转一次随机金额（不超过 TA 的余额）。</div>
       </div>
     </div>
     <p class="settings-foot">回复内容来自「公共词条库」<br>可以先去那里添加一些属于你们的句子</p>`;
@@ -6248,6 +6260,29 @@ async function maybeGenerateFriendContent(friendId, opening=false){
   if(changed) await saveFriendMeta(fm);
 }
 
+async function maybeFriendAutoMoney(f, now){
+  if(settings?.pace?.autoMoney === false) return false;
+  const chat = chats.find(c => c.kind === 'friend' && c.refId === f.id);
+  if(!chat) return false;
+  const fm = friendMetaOf(f.id);
+  const a = Math.max(1, Math.min(720, Number(settings?.pace?.moneyMinH) || 2));
+  const b = Math.max(a, Math.min(720, Number(settings?.pace?.moneyMaxH) || a));
+  const next = () => now + Math.round((a + Math.random()*(b - a))*3600*1000);
+  if(!fm.nextMoneyAt){
+    fm.nextMoneyAt = next();
+    await saveFriendMeta(fm);
+    return false;
+  }
+  if(now < fm.nextMoneyAt) return false;
+  fm.nextMoneyAt = next();
+  await saveFriendMeta(fm);
+  const bal = friendBalanceOf(f);
+  if(bal < 1) return false;
+  const amt = Math.round((0.01 + Math.random()*(bal - 0.01))*100)/100;
+  if(!(amt >= 0.01)) return false;
+  await sendTransfer(chat, amt, '给你的转账', 'friend');
+  return true;
+}
 async function processTimedFeatures(now){
   let needRefresh = false;
   const openChatId = view.name === 'chat' ? view.id : null;
@@ -6258,6 +6293,7 @@ async function processTimedFeatures(now){
       await saveFriendMeta(fm);
       syncStatusDom(fm);
     }
+    if(await maybeFriendAutoMoney(f, now)) needRefresh = true;
   }
 
   for(const p of polls){
@@ -7446,6 +7482,12 @@ document.addEventListener('input', e => {
   }else if(key === 'count'){
     const v = Number(el.value);
     settings.pace.count = Number.isFinite(v) ? Math.min(10, Math.max(1, Math.round(v))) : 1;
+    saveSettings();
+  }else if(key === 'moneyMinH' || key === 'moneyMaxH'){
+    const v = Number(el.value);
+    const n = Number.isFinite(v) && el.value !== '' ? Math.min(720, Math.max(1, Math.round(v))) : (key === 'moneyMinH' ? 2 : 8);
+    settings.pace[key] = n;
+    if(settings.pace.moneyMaxH < settings.pace.moneyMinH) settings.pace.moneyMaxH = settings.pace.moneyMinH;
     saveSettings();
   }else if(key === 'theme-custom'){
     const target = el.dataset.target;
