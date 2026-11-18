@@ -6252,18 +6252,19 @@ async function maybeFriendRandomTransfer(f, now){
   const chat = chats.find(c => c.kind === 'friend' && c.refId === f.id);
   if(!chat) return false;
   const fm = friendMetaOf(f.id);
+  if(fm.transferDone) return false;
   if(!fm.nextTransferAt){
     fm.nextTransferAt = now + (20 + Math.floor(Math.random()*130)) * 60000;
     await saveFriendMeta(fm);
     return false;
   }
   if(now < fm.nextTransferAt) return false;
-  fm.nextTransferAt = now + (25 + Math.floor(Math.random()*155)) * 60000;
-  await saveFriendMeta(fm);
   const bal = friendBalanceOf(f);
   if(bal < 1) return false;
   const amt = Math.round(Math.min(bal, 5 + Math.random()*195)*100)/100;
-  if(!(amt >= 0.01)) return true;
+  if(!(amt >= 0.01)) return false;
+  fm.transferDone = true;
+  await saveFriendMeta(fm);
   await sendTransfer(chat, amt, '给你的转账', 'friend');
   return true;
 }
