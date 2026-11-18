@@ -4197,7 +4197,7 @@ async function requestFriendTransfer(chat){
   if(!f) return;
   const bal = friendBalanceOf(f);
   if(bal < 1) return toast(`「${f.name}」余额不足，可在好友资料里修改 TA 的余额`);
-  const amt = Math.round(Math.min(bal, 5 + Math.random()*Math.min(bal, 200))*100)/100;
+  const amt = Math.round((0.01 + Math.random()*(bal - 0.01))*100)/100;
   await sendTransfer(chat, Math.max(0.01, amt), '给你的转账', 'friend');
 }
 async function acceptTransfer(chat, msgId){
@@ -6248,26 +6248,6 @@ async function maybeGenerateFriendContent(friendId, opening=false){
   if(changed) await saveFriendMeta(fm);
 }
 
-async function maybeFriendRandomTransfer(f, now){
-  const chat = chats.find(c => c.kind === 'friend' && c.refId === f.id);
-  if(!chat) return false;
-  const fm = friendMetaOf(f.id);
-  if(fm.transferDone) return false;
-  if(!fm.nextTransferAt){
-    fm.nextTransferAt = now + (20 + Math.floor(Math.random()*130)) * 60000;
-    await saveFriendMeta(fm);
-    return false;
-  }
-  if(now < fm.nextTransferAt) return false;
-  const bal = friendBalanceOf(f);
-  if(bal < 1) return false;
-  const amt = Math.round(Math.min(bal, 5 + Math.random()*195)*100)/100;
-  if(!(amt >= 0.01)) return false;
-  fm.transferDone = true;
-  await saveFriendMeta(fm);
-  await sendTransfer(chat, amt, '给你的转账', 'friend');
-  return true;
-}
 async function processTimedFeatures(now){
   let needRefresh = false;
   const openChatId = view.name === 'chat' ? view.id : null;
@@ -6278,7 +6258,6 @@ async function processTimedFeatures(now){
       await saveFriendMeta(fm);
       syncStatusDom(fm);
     }
-    if(await maybeFriendRandomTransfer(f, now)) needRefresh = true;
   }
 
   for(const p of polls){
