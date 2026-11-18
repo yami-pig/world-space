@@ -5034,8 +5034,10 @@ function openPlusSheet(chat){
     ['poll','i-vote','投票系统','发起一次投票'],
     ['dress','i-palette','装扮系统','只作用于本会话'],
     ['storage','i-database','存储系统','查看并清理本会话'],
+    ['transfer','i-wallet','转钱给 TA','从我的余额转账'],
     ['survey','i-survey','问卷系统','5–20 道随机题']
   ];
+  if(chat.kind === 'friend') items.splice(4, 0, ['transfer-in','i-download','让 TA 转钱','金额随机，不超 TA 余额']);
   openSheet({
     title:'更多功能',
     body:`<div class="attach-grid">
@@ -5052,6 +5054,8 @@ function openPlusSheet(chat){
           else if(key === 'dress') openDressSheet(chat);
           else if(key === 'storage') openChatStorageSheet(chat);
           else if(key === 'survey') openSurveyMenu(chat);
+          else if(key === 'transfer') openTransferForm(chat);
+          else if(key === 'transfer-in') requestFriendTransfer(chat);
         }, 70);
       });
     }
