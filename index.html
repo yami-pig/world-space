@@ -6703,6 +6703,10 @@ function openMomentForm(){
   });
 }
 
+function commentPoolFor(friendId, fallback){
+  const pool = libTextPool(friendId, ['card']);
+  return pool.length ? pool : fallback;
+}
 function scheduleMomentReactions(moment){
   if(!friends.length) return;
   setTimeout(async () => {
@@ -6713,11 +6717,11 @@ function scheduleMomentReactions(moment){
     const likedBy = pool.slice(0, likeCount);
     fresh.likes = Array.from(new Set([...(fresh.likes || []), ...likedBy.map(f => f.id)]));
     const commentCount = 1 + Math.floor(Math.random()*Math.min(2, pool.length));
-    const lines = ['真好呀。','看起来很舒服。','下次也带上我吧。','哈哈哈哈，太懂了。','这一刻值得记住。','今天也要开心。'];
+    const fallback = ['真好呀。','看起来很舒服。','下次也带上我吧。','哈哈哈哈，太懂了。','这一刻值得记住。','今天也要开心。'];
     fresh.comments = [...(fresh.comments || [])];
     for(let i = 0; i < commentCount; i++){
       const f = pool[i % pool.length];
-      fresh.comments.push({id:'cmt_'+uid(), userId:f.id, name:f.name, text:pick(lines), at:Date.now()});
+      fresh.comments.push({id:'cmt_'+uid(), userId:f.id, name:f.name, text:pick(commentPoolFor(f.id, fallback)), at:Date.now()});
     }
     await dbPut('moments', fresh);
     if(view.name === 'moments') softRender();
@@ -6846,11 +6850,11 @@ function scheduleDiaryReplies(diary){
     if(!fresh) return;
     const pool = friends.slice().sort(() => Math.random() - 0.5);
     const count = 1 + Math.floor(Math.random()*Math.min(2, pool.length));
-    const lines = ['看完了，抱抱你。','这一天辛苦了。','写下来就很好。','我懂那种感觉。','明天会更好一点。','记得早点休息。'];
+    const fallback = ['看完了，抱抱你。','这一天辛苦了。','写下来就很好。','我懂那种感觉。','明天会更好一点。','记得早点休息。'];
     fresh.comments = [...(fresh.comments || [])];
     for(let i = 0; i < count; i++){
       const f = pool[i % pool.length];
-      fresh.comments.push({id:'cmt_'+uid(), userId:f.id, name:f.name, text:pick(lines), at:Date.now()});
+      fresh.comments.push({id:'cmt_'+uid(), userId:f.id, name:f.name, text:pick(commentPoolFor(f.id, fallback)), at:Date.now()});
     }
     await dbPut('diaries', fresh);
     if(view.name === 'diary') softRender();
