@@ -517,7 +517,9 @@ h1,h2,h3,h4,p{margin:0}
 .msg{display:flex;gap:8px;align-items:flex-start;margin-bottom:15px;animation:msgIn .22s ease both}
 .msg.me{flex-direction:row-reverse}
 @keyframes msgIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-.msg .avatar{width:40px;height:40px;border-radius:50%;border:2px solid rgba(255,255,255,.95);box-shadow:0 2px 9px rgba(24,42,74,.1);cursor:pointer;transition:transform .15s}
+.msg .avatar{width:40px;height:40px;border-radius:50%;border:2px solid rgba(255,255,255,.95);box-shadow:0 2px 9px rgba(24,42,74,.1);cursor:pointer;transition:transform .15s;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+.msg .avatar.pat-pop{animation:patPop .42s cubic-bezier(.2,1.4,.4,1)}
+@keyframes patPop{0%{transform:scale(1)}35%{transform:scale(1.22) rotate(-6deg)}70%{transform:scale(.96) rotate(3deg)}100%{transform:scale(1)}}
 .msg .avatar:active{transform:scale(.9)}
 .msg-main{max-width:min(64%,480px);display:flex;flex-direction:column;align-items:flex-start;min-width:0}
 .msg.me .msg-main{align-items:flex-end}
@@ -6868,6 +6870,8 @@ async function deleteDiary(id){
 /* =========================================================
    全局事件
    ========================================================= */
+let avatarTapState = null;
+const AVATAR_DBL_MS = 320;
 document.addEventListener('click', async e => {
   const trigger = e.target.closest('[data-act]');
   if(!trigger) return;
@@ -7186,8 +7190,27 @@ document.addEventListener('click', async e => {
       break;
     case 'msg-avatar': {
       const sender = trigger.dataset.sender;
-      if(sender === 'me') switchTab('me');
-      else if(sender) openFriendDetail(sender);
+      const chatId = trigger.dataset.chat;
+      const c = chatId ? chatById(chatId) : null;
+      const now = Date.now();
+      if(avatarTapState && avatarTapState.el === trigger && now - avatarTapState.at < AVATAR_DBL_MS){
+        clearTimeout(avatarTapState.timer);
+        avatarTapState = null;
+        if(sender && sender !== 'me' && c){
+          trigger.classList.remove('pat-pop');
+          void trigger.offsetWidth;
+          trigger.classList.add('pat-pop');
+          patMember(c, sender);
+        }
+        break;
+      }
+      if(avatarTapState) clearTimeout(avatarTapState.timer);
+      const timer = setTimeout(() => {
+        avatarTapState = null;
+        if(sender === 'me') switchTab('me');
+        else if(sender) openFriendDetail(sender);
+      }, AVATAR_DBL_MS);
+      avatarTapState = { el: trigger, at: now, timer };
       break;
     }
     default:
