@@ -725,6 +725,17 @@ html[data-bubble="square"] .msg .bubble{border-radius:8px}
 .moment-comments{background:rgba(20,35,60,.03);border-radius:10px;padding:8px 10px;margin-top:9px;display:flex;flex-direction:column;gap:5px}
 .moment-comment{font-size:11.5px;line-height:1.6;color:var(--text-2);word-break:break-word}
 .moment-comment b{color:#3a5a8f;font-weight:700}
+/* 转账 */
+.bubble.transfer{padding:0;background:none;border:none;box-shadow:none}
+.tr-card{display:flex;align-items:center;gap:10px;min-width:200px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#f6a623,#f8bd4c);color:#fff;box-shadow:0 8px 20px rgba(214,140,20,.28);cursor:pointer}
+.tr-card.done{background:linear-gradient(135deg,#efb04a,#f7cc86)}
+.tr-ico{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.24);display:flex;align-items:center;justify-content:center;flex:none}
+.tr-ico .ic{width:18px;height:18px;stroke:#fff}
+.tr-main{min-width:0;flex:1}
+.tr-main b{display:block;font-size:16px;font-weight:760;font-variant-numeric:tabular-nums}
+.tr-main span{display:block;font-size:10.5px;opacity:.92;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.tr-tag{font-size:10.5px;padding:3px 7px;border-radius:7px;background:rgba(255,255,255,.24);white-space:nowrap}
+.tr-quick{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .moment-likes{display:flex;align-items:center;gap:5px;font-size:11px;color:#e5487a;padding:6px 2px 0;flex-wrap:wrap}
 .moment-likes .ic{width:13px;height:13px;fill:currentColor}
 
@@ -1842,6 +1853,7 @@ function msgSummary(msg){
     case 'poll': return '[投票]';
     case 'survey': return '[问卷]';
     case 'letter-msg': return '[信封]';
+    case 'transfer': return '[转账]';
     case 'card': return msg.content;
     default: return msg.content || '';
   }
@@ -2495,6 +2507,7 @@ function openFriendDetail(id){
         ${friendPanelRow('mood','i-mood','心情',fm.status.mood,false)}
         ${friendPanelRow('state','i-status','状态',fm.status.state,false)}
         ${friendPanelRow('weather','i-weather','天气',fm.status.weather,false)}
+        ${friendPanelRow('balance','i-wallet','TA 的余额','¥' + friendBalanceOf(f).toFixed(2))}
         ${isLoverFriend(f.id) ? friendPanelRow('couple','i-couple','情侣空间','在一起 ' + daysTogether(fm.couple.startAt) + ' 天') : ''}
         ${friendPanelRow('chatSettings','i-sliders','聊天设置','只对这个好友生效')}
         ${friendPanelRow('moments','i-images','朋友圈',friendPosts.filter(x=>x.friendId===f.id&&x.kind==='moment').length + ' 条')}
@@ -2514,6 +2527,7 @@ function openFriendDetail(id){
           if(key === 'couple') openCouplePanel(f.id);
           else if(key === 'chatSettings') openFriendChatSettings(f.id);
           else if(key === 'moments') openFriendPosts(f.id, 'moment');
+          else if(key === 'balance') openFriendBalanceForm(f);
         }, 70);
       });
       el.querySelector('[data-do="chat"]').onclick = async () => {
@@ -3598,6 +3612,15 @@ function messageHTML(chat, m){
   }else if(m.type === 'card'){
     bubbleCls = 'bubble card';
     content = esc(m.content);
+  }else if(m.type === 'transfer'){
+    bubbleCls = 'bubble transfer';
+    const amt = Number(m.amount || 0);
+    const stTxt = m.status === 'received' ? '已收款' : (m.status === 'refunded' ? '已退回' : (mine ? '待对方收款' : '点击收款'));
+    content = `<div class="tr-card ${m.status === 'received' ? 'done' : ''}" data-act="transfer-open" data-msg="${m.id}" data-chat="${chat.id}">
+      <div class="tr-ico">${icon('i-wallet','sm')}</div>
+      <div class="tr-main"><b>¥${amt.toFixed(2)}</b><span>${esc(m.note || '转账')}</span></div>
+      <div class="tr-tag">${stTxt}</div>
+    </div>`;
   }else if(m.type === 'status'){
     bubbleCls = 'bubble status';
     content = '状态 · ' + esc(m.content);
@@ -3961,6 +3984,17 @@ function openAttachSheet(){
         <span class="icon-tile">${icon('i-book')}</span>
         <span class="grow">管理和添加词条</span>
         ${icon('i-right','chev')}
+      </button>
+      <div class="section-label" style="margin-top:10px">转账</div>
+      <button class="menu-item" data-attach-transfer="me">
+        <span class="icon-tile t2">${icon('i-wallet')}</span>
+        <span class="grow">转钱给 TA</span>
+        ${icon('i-right','chev')}
+      </button>
+      <button class="menu-item" data-attach-transfer="friend">
+        <span class="icon-tile t2">${icon('i-download')}</span>
+        <span class="grow">让 TA 转钱给我</span>
+        ${icon('i-right','chev')}
       </button>`,
     onMount(el, close){
       el.querySelectorAll('[data-attach]').forEach(btn => btn.onclick = () => {
@@ -3969,6 +4003,14 @@ function openAttachSheet(){
         setTimeout(() => openLibraryPicker(type, chat), 70);
       });
       el.querySelector('[data-go-lib]').onclick = () => { close(); setTimeout(()=>navigate('library'), 80); };
+      el.querySelector('[data-attach-transfer="me"]').onclick = () => {
+        close();
+        setTimeout(() => openTransferForm(chat), 70);
+      };
+      el.querySelector('[data-attach-transfer="friend"]').onclick = () => {
+        close();
+        setTimeout(() => requestFriendTransfer(chat), 70);
+      };
     }
   });
 }
@@ -4059,6 +4101,161 @@ async function sendPatWithObject(chat, objectText){
   }
   const text = `我拍了拍${targetName}的${objectText || chatCfg(chat).display.patOther || '肩膀'}`;
   await pushPatMessage(chat, text, 'me', true);
+}
+
+/* ---------- 转账 ---------- */
+function friendBalanceOf(f){
+  if(!f) return 0;
+  if(!Number.isFinite(Number(f.balance))){
+    f.balance = 500 + Math.floor(Math.random()*2500);
+    dbPut('friends', f);
+  }
+  return Number(f.balance || 0);
+}
+async function addLedgerEntry(type, amount, note){
+  const rec = { id:'tx_'+uid(), type, amount:Math.round(Number(amount)*100)/100, note, at:Date.now() };
+  await dbPut('ledger', rec);
+  ledger.push(rec);
+  me = Object.assign({}, me || {id:'me', createdAt:Date.now()}, {
+    balance: Math.round((Number(me?.balance || 0) + (type === 'in' ? rec.amount : -rec.amount))*100)/100
+  });
+  await dbPut('profile', me);
+  return rec;
+}
+async function sendTransfer(chat, amount, note, from){
+  const amt = Math.round(Number(amount)*100)/100;
+  if(!(amt > 0)) return;
+  const mine = from !== 'friend';
+  let sender = 'me';
+  if(!mine){
+    if(chat.kind !== 'friend') return toast('群聊暂不支持');
+    const f = friendById(chat.refId);
+    if(!f) return;
+    if(friendBalanceOf(f) < amt) return toast(`「${f.name}」余额不足`);
+    f.balance = Math.round((friendBalanceOf(f) - amt)*100)/100;
+    await dbPut('friends', f);
+    sender = f.id;
+  }else{
+    if(amt > Number(me?.balance || 0)) return toast('余额不足，可到「账户」修改余额');
+    await addLedgerEntry('out', amt, `转账给「${chat.name}」`);
+  }
+  const msg = await pushSpecialMessage(chat, sender, 'transfer', {
+    content:'转账', amount:amt, note:note || '转账', status:'pending'
+  });
+  if(mine){
+    setTimeout(async () => {
+      const list = await getMessages(chat.id, true);
+      const fresh = list.find(x => x.id === (msg && msg.id));
+      if(!fresh || fresh.status !== 'pending') return;
+      fresh.status = 'received';
+      await dbPut('messages', fresh);
+      invalidateMessages(chat.id);
+      if(chat.kind === 'friend'){
+        const f = friendById(chat.refId);
+        if(f){
+          f.balance = Math.round((friendBalanceOf(f) + amt)*100)/100;
+          await dbPut('friends', f);
+        }
+      }
+      if(view.name === 'chat' && view.id === chat.id) await refreshChat(false);
+      toast(`「${chat.name}」已收款`);
+      scheduleReply(chat);
+    }, 2500 + Math.random()*6000);
+  }else{
+    toast(`「${chat.name}」向你转账 ¥${amt.toFixed(2)}`);
+  }
+  return msg;
+}
+function openTransferForm(chat){
+  if(!chat) return;
+  const bal = Number(me?.balance || 0);
+  openSheet({
+    title:'转账',
+    body:`<div class="field"><label>转账金额（元）</label><input class="input" id="trAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00"></div>
+      <div class="tr-quick">${[5.2,13.14,52,88,100,520].map(v => `<button class="btn tiny soft" type="button" data-tr-quick="${v}">¥${v}</button>`).join('')}</div>
+      <div class="field" style="margin-top:14px"><label>备注（可选）</label><input class="input" id="trNote" maxlength="30" placeholder="写句祝福…"></div>
+      <p class="form-note">当前余额 ¥${bal.toFixed(2)}，转账后立即从余额扣除。</p>`,
+    footer:`<button class="btn soft" type="button" data-close>取消</button><button class="btn" type="button" id="trSend">转账</button>`,
+    onMount(el, close){
+      const amtEl = el.querySelector('#trAmount');
+      setTimeout(() => amtEl.focus(), 120);
+      el.querySelectorAll('[data-tr-quick]').forEach(b => b.onclick = () => { amtEl.value = b.dataset.trQuick; });
+      el.querySelector('#trSend').onclick = async () => {
+        const amt = Number(amtEl.value);
+        if(!(amt > 0)) return toast('请输入大于 0 的金额');
+        if(Math.round(amt*100)/100 > bal) return toast('余额不足，可到「账户」修改余额');
+        const note = el.querySelector('#trNote').value.trim();
+        close();
+        await sendTransfer(chat, amt, note, 'me');
+      };
+    }
+  });
+}
+async function requestFriendTransfer(chat){
+  if(!chat || chat.kind !== 'friend') return toast('群聊暂不支持');
+  const f = friendById(chat.refId);
+  if(!f) return;
+  const bal = friendBalanceOf(f);
+  if(bal < 1) return toast(`「${f.name}」余额不足，可在好友资料里修改 TA 的余额`);
+  const amt = Math.round(Math.min(bal, 5 + Math.random()*Math.min(bal, 200))*100)/100;
+  await sendTransfer(chat, Math.max(0.01, amt), '给你的转账', 'friend');
+}
+async function acceptTransfer(chat, msgId){
+  const list = await getMessages(chat.id, true);
+  const msg = list.find(x => x.id === msgId);
+  if(!msg || msg.status !== 'pending' || msg.sender === 'me') return;
+  msg.status = 'received';
+  await dbPut('messages', msg);
+  invalidateMessages(chat.id);
+  await addLedgerEntry('in', Number(msg.amount || 0), `收到「${chat.name}」的转账`);
+  if(view.name === 'chat' && view.id === chat.id) await refreshChat(false);
+  toast(`已收款 ¥${Number(msg.amount || 0).toFixed(2)}`);
+}
+async function openTransferDetail(chat, msgId){
+  const list = await getMessages(chat.id, true);
+  const msg = list.find(x => x.id === msgId);
+  if(!msg) return;
+  const amt = Number(msg.amount || 0);
+  const mine = msg.sender === 'me';
+  if(!mine && msg.status === 'pending'){
+    const ok = await confirmDialog({title:'收款', message:`确认收取「${chat.name}」转账的 ¥${amt.toFixed(2)} 吗？`, confirmText:'确认收款'});
+    if(ok) await acceptTransfer(chat, msgId);
+    return;
+  }
+  const stTxt = msg.status === 'received' ? '已收款' : (mine ? '等待对方收款' : '待收款');
+  openSheet({
+    title:'转账详情',
+    body:`<div style="text-align:center;padding:10px 0 4px"><div style="font-size:26px;font-weight:760;font-variant-numeric:tabular-nums">¥${amt.toFixed(2)}</div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:6px">${esc(msg.note || '转账')}</div></div>
+      <div class="card" style="margin-top:12px">
+        <div class="row"><span class="grow">${mine ? '收款方' : '转账方'}</span><span class="row-value">${esc(chat.name)}</span></div>
+        <div class="row"><span class="grow">状态</span><span class="row-value">${stTxt}</span></div>
+        <div class="row"><span class="grow">时间</span><span class="row-value">${fmtFull(msg.at)}</span></div>
+      </div>`,
+    footer:`<button class="btn soft" type="button" data-close>关闭</button>`
+  });
+}
+function openFriendBalanceForm(f){
+  if(!f) return;
+  openSheet({
+    title:`「${f.name}」的余额`,
+    body:`<div class="field"><label>余额（元）</label><input class="input" id="fbInput" type="number" step="0.01" inputmode="decimal" value="${friendBalanceOf(f).toFixed(2)}"></div>
+      <p class="form-note">TA 给你转账时会从这里的余额扣除；也可以随时调高让 TA 更「有钱」。</p>`,
+    footer:`<button class="btn soft" type="button" data-close>取消</button><button class="btn" type="button" id="fbSave">保存</button>`,
+    onMount(el, close){
+      const inp = el.querySelector('#fbInput');
+      setTimeout(() => { inp.focus(); inp.select(); }, 120);
+      el.querySelector('#fbSave').onclick = async () => {
+        const val = Number(inp.value);
+        if(!Number.isFinite(val)) return toast('请输入有效金额');
+        f.balance = Math.round(val*100)/100;
+        await dbPut('friends', f);
+        close();
+        toast('已更新 TA 的余额');
+        setTimeout(() => openFriendDetail(f.id), 60);
+      };
+    }
+  });
 }
 
 /* ---------- 聊天信息 / 清空 ---------- */
@@ -6014,7 +6211,7 @@ async function pushSpecialMessage(chat, sender, type, extra={}){
     id:'msg_'+uid(), chatId:chat.id, sender, type,
     content:extra.content || '', at:Date.now(), read:sender === 'me'
   };
-  ['pollId','surveyId','letterId'].forEach(k => { if(extra[k]) msg[k] = extra[k]; });
+  ['pollId','surveyId','letterId','amount','note','status'].forEach(k => { if(extra[k] !== undefined) msg[k] = extra[k]; });
   await dbPut('messages', msg);
   invalidateMessages(chat.id);
   chat.lastMsg = msgPreview(chat, msg);
@@ -7192,6 +7389,11 @@ document.addEventListener('click', async e => {
       quoteTarget = null;
       renderQuoteBar();
       break;
+    case 'transfer-open': {
+      const c = trigger.dataset.chat ? chatById(trigger.dataset.chat) : chat;
+      if(c) await openTransferDetail(c, trigger.dataset.msg);
+      break;
+    }
     case 'msg-avatar': {
       const sender = trigger.dataset.sender;
       const chatId = trigger.dataset.chat;
