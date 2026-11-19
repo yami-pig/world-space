@@ -2740,6 +2740,11 @@ function renderSettingsPage(){
           <div class="grow"><div class="setting-title">${title}</div><div class="setting-desc">${desc}</div></div>
           ${icon('i-right','chev')}
         </div>`).join('')}
+      <div class="setting-row" data-act="install-app" role="button" tabindex="0">
+        <div class="icon-tile t3">${icon('i-download')}</div>
+        <div class="grow"><div class="setting-title">安装到桌面</div><div class="setting-desc">变成独立 App，全屏运行、离线可用</div></div>
+        <span class="chip green">APP</span>
+      </div>
     </div>
     <p class="settings-foot">「世界」v1.0 · 为私人使用而做<br>数据不会上传，换设备请使用「导出导入」迁移</p>
   </div>`;
@@ -6522,6 +6527,58 @@ function closeSheet(){
   currentSheet = null;
 }
 
+/* =========================================================
+   安装到桌面（PWA）
+   ========================================================= */
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  toast('已安装到桌面');
+});
+
+function isStandalone(){
+  return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+    || window.navigator.standalone === true;
+}
+
+function installHelpHTML(){
+  const ua = navigator.userAgent;
+  if(/MicroMessenger|QQ\/|Weibo|DingTalk|AlipayClient|aweme|douyin/i.test(ua)){
+    return '当前在应用内置浏览器里，无法直接安装。<br><b>请点右上角「···」→「在浏览器打开」</b>，再按下面的步骤安装。';
+  }
+  if(/iPhone|iPad|iPod/i.test(ua)){
+    return 'Safari 打开后：<br>点底部「分享」按钮 → 「添加到主屏幕」→ 右上角「添加」。<br><br>注意：必须用 <b>Safari</b>，Chrome 等第三方浏览器不支持。';
+  }
+  if(/Android/i.test(ua)){
+    return 'Chrome 打开后：<br>点右上角「⋮」→「安装应用」（或「添加到主屏幕」）→ 确认。';
+  }
+  return 'Chrome / Edge 打开后：<br>点地址栏右侧的安装图标，或右上角「⋮」→「安装 世界」。<br><br>若没有安装图标，说明浏览器还在缓存旧版本，<b>刷新一次</b>或换个浏览器标签重新打开。';
+}
+
+async function installApp(){
+  if(isStandalone()){
+    toast('已经在独立窗口里运行了');
+    return;
+  }
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    const res = await deferredInstallPrompt.userChoice.catch(() => null);
+    deferredInstallPrompt = null;
+    if(res && res.outcome === 'accepted') toast('正在安装…');
+    else toast('已取消安装');
+    return;
+  }
+  openSheet({
+    title: '安装到桌面',
+    body: `<div style="font-size:13.5px;line-height:1.8;color:var(--text-2)">${installHelpHTML()}</div>`,
+    footer: `<button class="btn ghost" data-close type="button">知道了</button>`
+  });
+}
+
 function confirmDialog(config={}){
   const title = config.title || '确认操作';
   const message = config.message || '';
@@ -7446,6 +7503,9 @@ document.addEventListener('click', async e => {
     }
     case 'open-plus':
       if(chat) openPlusSheet(chat);
+      break;
+    case 'install-app':
+      await installApp();
       break;
     case 'poll-vote':
       await pollVote(trigger.dataset.poll, trigger.dataset.opt);
