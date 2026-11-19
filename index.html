@@ -3925,6 +3925,12 @@ function onChatInput(){
   input.style.height = Math.min(120, input.scrollHeight) + 'px';
   updateSendState();
 }
+/* 仅在桌面端主动聚焦输入框；手机端聚焦会强行弹出键盘 */
+function focusChatInput(){
+  if(!window.matchMedia('(pointer:fine)').matches) return;
+  const input = $('#chatInput');
+  if(input) input.focus();
+}
 function updateSendState(){
   const input = $('#chatInput');
   const btn = $('[data-act="send-chat"]');
@@ -3985,7 +3991,7 @@ async function sendChatText(){
   input.style.height = 'auto';
   updateSendState();
   await sendChatMessage(chat, {type:'text', content:text});
-  if($('#chatInput')) $('#chatInput').focus();
+  focusChatInput();
 }
 
 async function sendChatMessage(chat, payload){
@@ -4106,8 +4112,7 @@ function openLibraryPicker(type, chat){
         }else{
           await sendChatMessage(chat, {type, content:item.content, label:item.label});
         }
-        const input = $('#chatInput');
-        if(input) input.focus();
+        focusChatInput();
       });
       el.querySelector('#pickerManage').onclick = () => { close(); setTimeout(()=>navigate('library'), 80); };
     }
@@ -5018,7 +5023,7 @@ function renderExpressionSheet(chat){
         close();
         if(type === 'pat') await sendPatWithObject(chat, item.content);
         else await sendChatMessage(chat, {type, content:item.content, label:item.label});
-        if($('#chatInput')) $('#chatInput').focus();
+        focusChatInput();
       });
       const add = el.querySelector('[data-eadd]');
       if(add) add.onclick = () => {
