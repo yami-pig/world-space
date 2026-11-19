@@ -3770,10 +3770,14 @@ async function renderChatMessages(chat, forceBottom=false, animatePatId=null){
   const wrap = $('#chatMessages');
   const scroll = $('#chatScroll');
   if(!wrap) return;
-  stopVoiceAudio();
   const msgs = await getMessages(chat.id);
   const nearBottom = scroll ? (scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 130) : true;
   wrap.innerHTML = renderChatMessagesHTML(chat, msgs);
+  if(voiceAudio && voicePlayingId){
+    const nb = wrap.querySelector(`.voice-wrap[data-msg="${voicePlayingId}"]`);
+    if(nb){ voiceAudioBtn = nb; nb.classList.add('playing'); setVoiceIcon(nb, true); }
+    else stopVoiceAudio();
+  }
   if(animatePatId){
     const el = wrap.querySelector(`.sys-msg[data-msgid="${animatePatId}"]`);
     if(el) el.classList.add('pat-anim');
@@ -4057,6 +4061,7 @@ async function sendChatText(){
 let voiceRec = null;      // { rec, stream, chunks, startedAt, mime, timer }
 let voiceAudio = null;
 let voiceAudioBtn = null;
+let voicePlayingId = null;
 
 function fmtVoiceDur(sec){
   const s = Math.max(0, Math.round(sec));
@@ -4187,6 +4192,7 @@ function stopVoiceAudio(){
   if(voiceAudioBtn){ voiceAudioBtn.classList.remove('playing'); setVoiceIcon(voiceAudioBtn, false); }
   voiceAudio = null;
   voiceAudioBtn = null;
+  voicePlayingId = null;
 }
 async function toggleVoicePlay(btn){
   const chat = chatById(view.id);
@@ -4208,12 +4214,13 @@ async function toggleVoicePlay(btn){
   const a = new Audio(m.content);
   voiceAudio = a;
   voiceAudioBtn = btn;
+  voicePlayingId = btn.dataset.msg;
   btn.classList.add('playing');
   setVoiceIcon(btn, true);
   a.onended = () => {
     btn.classList.remove('playing');
     setVoiceIcon(btn, false);
-    if(voiceAudio === a){ voiceAudio = null; voiceAudioBtn = null; }
+    if(voiceAudio === a){ voiceAudio = null; voiceAudioBtn = null; voicePlayingId = null; }
   };
   try{ await a.play(); }
   catch(e){
@@ -4221,6 +4228,7 @@ async function toggleVoicePlay(btn){
     setVoiceIcon(btn, false);
     voiceAudio = null;
     voiceAudioBtn = null;
+    voicePlayingId = null;
     toast('播放失败，试试重新录一条');
   }
 }
