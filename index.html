@@ -1256,7 +1256,7 @@ const BUBBLE_SWATCHES = ['#dd6b9b','#5a8dee','#7a6cf0','#e5806b','#39b98a','#3b4
 
 const DEFAULT_SETTINGS = {
   key: 'settings',
-  theme:  { bg:'#fdf0f5', me:'#dd6b9b', other:'#ffffff', font:'default', bubble:'tail' },
+  theme:  { bg:'#fdf0f5', me:'#dd6b9b', other:'#ffffff', font:'default', bubble:'tail', customCss:'' },
   features:{ quote:true, read:true, typing:true, time:true },
   pace:    { delayMin:30, delayMax:60, count:2, autoMin:1, autoMax:3, autoSend:false, combo:true, video:true, autoMoney:true, moneyMinH:2, moneyMaxH:8 },
   display: { patMe:'脑袋', patOther:'肩膀', leavePopup:false },
@@ -1563,8 +1563,23 @@ function applyTheme(){
   root.style.setProperty('--font', (FONTS[t.font]||FONTS.default).css);
   root.dataset.font = t.font === 'default' ? '' : t.font;
   root.dataset.bubble = t.bubble || 'tail';
+  applyCustomBubbleCss(t.customCss);
   const meta = document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', t.bg);
+}
+function applyCustomBubbleCss(css){
+  let el = document.getElementById('customBubbleCss');
+  const val = String(css || '');
+  if(!val.trim()){
+    if(el) el.textContent = '';
+    return;
+  }
+  if(!el){
+    el = document.createElement('style');
+    el.id = 'customBubbleCss';
+    document.head.appendChild(el);
+  }
+  el.textContent = val;
 }
 async function saveSettings(){
   if(!settings) return;
@@ -3003,6 +3018,17 @@ function renderThemePage(){
         <button class="option-pill ${t.bubble==='round'?'on':''}" data-act="theme-bubble" data-style="round">全圆角</button>
         <button class="option-pill ${t.bubble==='square'?'on':''}" data-act="theme-bubble" data-style="square">简洁方形</button>
       </div>
+    </div>
+
+    <div class="card card-pad" style="margin-top:12px">
+      <div class="card-title">自定义 CSS 气泡</div>
+      <div class="card-desc">写 CSS 就能改气泡的圆角、边框、阴影、渐变等，留空恢复默认。</div>
+      <textarea class="textarea" id="bubbleCssInput" spellcheck="false" style="margin-top:12px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.6" placeholder="/* 所有气泡 */&#10;.bubble{ border:1px solid rgba(221,107,155,.2); }&#10;/* 只改我 / 对方 */&#10;.msg.me .bubble{ box-shadow:0 8px 22px rgba(221,107,155,.35); }">${esc(t.customCss || '')}</textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn small" data-act="bubble-css-apply">应用 CSS</button>
+        <button class="btn small soft" data-act="bubble-css-clear">清空</button>
+      </div>
+      <p class="form-note" style="margin-top:8px">常用选择器：.bubble（全部气泡）、.msg.me .bubble（我的）、.msg.other .bubble（对方）、.bubble.card（字卡）。</p>
     </div>
 
     <div class="card card-pad" style="margin-top:12px">
@@ -7284,6 +7310,19 @@ document.addEventListener('click', async e => {
       settings.theme.font = trigger.dataset.font;
       await saveSettings();
       softRender();
+      break;
+    case 'bubble-css-apply': {
+      const ta = $('#bubbleCssInput');
+      settings.theme.customCss = ta ? ta.value : '';
+      await saveSettings();
+      toast('自定义气泡 CSS 已应用');
+      break;
+    }
+    case 'bubble-css-clear':
+      settings.theme.customCss = '';
+      await saveSettings();
+      softRender();
+      toast('已清空自定义气泡 CSS');
       break;
     case 'chat-settings-tab':
       ui.settingsTab = trigger.dataset.tab;
