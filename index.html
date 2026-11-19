@@ -641,16 +641,27 @@ html[data-bubble="square"] .msg .bubble{border-radius:8px}
 .send-btn:active{transform:scale(.92)}
 .send-btn[disabled]{background:rgba(20,35,60,.12);color:#fff;box-shadow:none;opacity:.7}
 /* 录音面板 */
-.voice-panel{display:flex;align-items:center;gap:9px;margin:0 2px 7px;padding:8px 10px;border-radius:12px;background:rgba(221,107,155,.09);border:1px solid rgba(221,107,155,.16)}
-.voice-panel[hidden]{display:none}
-.vp-dot{width:8px;height:8px;border-radius:50%;background:#ff5a72;flex:none;animation:vpPulse 1.1s ease-in-out infinite}
-.vp-time{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--accent);flex:none}
-.vp-hint{flex:1;min-width:0;font-size:11px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.vp-btn{height:30px;padding:0 13px;border-radius:9px;font-size:12px;font-weight:600;flex:none;transition:.15s}
-.vp-btn:active{transform:scale(.95)}
-.vp-btn.ghost{background:rgba(20,35,60,.06);color:var(--text-2)}
-.vp-btn.primary{background:var(--accent);color:#fff;box-shadow:0 4px 10px rgba(221,107,155,.28)}
-.composer-row .icon-btn.recording{background:var(--accent);color:#fff;box-shadow:0 4px 12px rgba(221,107,155,.3)}
+.voice-hud{
+  position:absolute;left:50%;bottom:calc(100% + 10px);transform:translateX(-50%) scale(.96);
+  z-index:60;display:flex;flex-direction:column;align-items:center;gap:7px;min-width:150px;padding:15px 26px;
+  border-radius:20px;background:rgba(26,22,28,.9);color:#fff;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  box-shadow:0 14px 36px rgba(0,0,0,.32);pointer-events:none;opacity:0;transition:opacity .16s ease,transform .16s ease
+}
+.voice-hud[hidden]{display:none}
+.voice-hud.show{opacity:1;transform:translateX(-50%) scale(1)}
+.voice-hud.cancel{background:rgba(206,62,84,.94)}
+.vh-bars{display:flex;align-items:center;gap:4px;height:26px}
+.vh-bars i{width:4px;border-radius:2px;background:#fff;height:8px;animation:vhWave .9s ease-in-out infinite}
+.vh-bars i:nth-child(2){animation-delay:.12s}
+.vh-bars i:nth-child(3){animation-delay:.24s}
+.vh-bars i:nth-child(4){animation-delay:.36s}
+.vh-bars i:nth-child(5){animation-delay:.48s}
+.vh-time{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.vh-hint{font-size:11.5px;opacity:.78;white-space:nowrap}
+.vh-wave-cancel{width:26px;height:26px;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:15px}
+.composer-row .icon-btn.voice-btn{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.composer-row .icon-btn.recording{background:var(--accent);color:#fff;box-shadow:0 4px 14px rgba(221,107,155,.42);transform:scale(1.06)}
+@keyframes vhWave{0%,100%{height:8px;opacity:.7}50%{height:24px;opacity:1}}
 @keyframes vpPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.78)}}
 .attach-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:4px 0 8px}
 @media(min-width:520px){.attach-grid{grid-template-columns:repeat(6,1fr)}}
@@ -3569,16 +3580,14 @@ function chatHeaderHTML(chat){
 function composerHTML(){
   return `<div class="composer">
     <div class="quote-chip" id="quoteBar" hidden></div>
-    <div class="voice-panel" id="voicePanel" hidden>
-      <span class="vp-dot"></span>
-      <span class="vp-time" id="voiceTimer">0:00</span>
-      <span class="vp-hint" id="voiceHint">正在录音，最长 60 秒</span>
-      <button class="vp-btn ghost" data-act="voice-cancel">取消</button>
-      <button class="vp-btn primary" data-act="voice-send">发送</button>
+    <div class="voice-hud" id="voiceHud" hidden>
+      <div class="vh-bars"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="vh-time" id="voiceTimer">0:00</div>
+      <div class="vh-hint" id="voiceHint">手指上滑取消</div>
     </div>
     <div class="composer-row">
       <button class="icon-btn" data-act="send-image" aria-label="图片">${icon('i-image')}</button>
-      <button class="icon-btn" data-act="voice-toggle" aria-label="语音消息">${icon('i-mic')}</button>
+      <button class="icon-btn voice-btn" data-act="voice-hold" aria-label="按住说话">${icon('i-mic')}</button>
       <button class="icon-btn" data-act="open-picker" data-type="sticker" aria-label="表情">${icon('i-smile')}</button>
       <textarea class="chat-input" id="chatInput" rows="1" maxlength="1000" placeholder="发消息…"></textarea>
       <button class="send-btn" data-act="send-chat" disabled aria-label="发送">${icon('i-send','sm')}</button>
@@ -4082,30 +4091,49 @@ function blobToDataURL(blob){
   });
 }
 function showVoicePanel(on){
-  const p = $('#voicePanel');
-  if(p) p.hidden = !on;
-  const btn = document.querySelector('[data-act="voice-toggle"]');
+  const p = $('#voiceHud');
+  const btn = document.querySelector('[data-act="voice-hold"]');
   if(btn) btn.classList.toggle('recording', !!on);
-  if(!on){
-    const t = $('#voiceTimer');
-    if(t) t.textContent = '0:00';
-    const h = $('#voiceHint');
-    if(h) h.textContent = '正在录音，最长 60 秒';
+  if(!p) return;
+  if(on){
+    p.hidden = false;
+    p.classList.toggle('cancel', false);
+    requestAnimationFrame(() => p.classList.add('show'));
+    const t = $('#voiceTimer'); if(t) t.textContent = '0:00';
+    const h = $('#voiceHint'); if(h) h.textContent = '手指上滑取消';
+  }else{
+    p.classList.remove('show','cancel');
+    const t = $('#voiceTimer'); if(t) t.textContent = '0:00';
+    const h = $('#voiceHint'); if(h) h.textContent = '手指上滑取消';
+    setTimeout(() => { if(!voiceRec) p.hidden = true; }, 180);
   }
 }
+function setVoiceCancelHint(on){
+  const p = $('#voiceHud');
+  if(p) p.classList.toggle('cancel', !!on);
+  const h = $('#voiceHint');
+  if(h) h.textContent = on ? '松开手指，取消发送' : '手指上滑取消';
+}
 
-async function startVoiceRecord(){
+async function startVoiceRecord(hold){
   if(voiceRec) return;
   if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined'){
     toast('当前环境不支持录音，请用手机浏览器打开');
     return;
   }
+  showVoicePanel(true);
   let stream;
   try{
     stream = await navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true } });
   }catch(err){
+    showVoicePanel(false);
     const denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
     toast(denied ? '需要允许麦克风权限才能发语音' : '麦克风打开失败');
+    return;
+  }
+  if(hold && hold.released){
+    stream.getTracks().forEach(t => t.stop());
+    showVoicePanel(false);
     return;
   }
   const mime = pickAudioMime();
@@ -4114,6 +4142,7 @@ async function startVoiceRecord(){
     rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
   }catch(e){
     stream.getTracks().forEach(t => t.stop());
+    showVoicePanel(false);
     toast('录音初始化失败');
     return;
   }
@@ -4121,9 +4150,8 @@ async function startVoiceRecord(){
   voiceRec = vr;
   rec.ondataavailable = ev => { if(ev.data && ev.data.size) vr.chunks.push(ev.data); };
   try{ rec.start(250); }
-  catch(e){ stream.getTracks().forEach(t => t.stop()); voiceRec = null; toast('录音启动失败'); return; }
+  catch(e){ stream.getTracks().forEach(t => t.stop()); voiceRec = null; showVoicePanel(false); toast('录音启动失败'); return; }
 
-  showVoicePanel(true);
   const tick = () => {
     if(voiceRec !== vr) return;
     const s = (Date.now() - vr.startedAt) / 1000;
@@ -4138,6 +4166,9 @@ async function startVoiceRecord(){
   };
   tick();
   vr.timer = setInterval(tick, 200);
+  if(hold && hold.released){
+    hold.cancelled ? cancelVoiceRecord() : sendVoiceMessage();
+  }
 }
 
 function stopVoiceRecord(){
@@ -4152,7 +4183,8 @@ function stopVoiceRecord(){
       done = true;
       try{ vr.stream.getTracks().forEach(t => t.stop()); }catch(e){}
       const blob = new Blob(vr.chunks, { type: vr.mime || 'audio/webm' });
-      resolve({ blob, dur: Math.max(1, Math.round((Date.now() - vr.startedAt) / 1000)) });
+      const ms = Date.now() - vr.startedAt;
+      resolve({ blob, ms, dur: Math.max(1, Math.round(ms / 1000)) });
     };
     vr.rec.onstop = finish;
     try{
@@ -4167,6 +4199,7 @@ async function sendVoiceMessage(){
   const res = await stopVoiceRecord();
   showVoicePanel(false);
   if(!res) return;
+  if(res.ms < 700){ toast('说话时间太短'); return; }
   if(!res.blob || res.blob.size < 800){ toast('没有录到声音，再试一次'); return; }
   const chat = chatById(view.id);
   if(!chat) return;
@@ -4180,7 +4213,40 @@ async function cancelVoiceRecord(){
   const had = !!voiceRec;
   await stopVoiceRecord();
   showVoicePanel(false);
-  if(had) toast('已取消录音');
+  if(had) toast('已取消');
+}
+
+/* 按住说话：pointerdown 开始，上滑取消，松开结束 */
+let voiceHold = null;
+function beginVoiceHold(e){
+  if(voiceHold || voiceRec) return;
+  e.preventDefault();
+  const hold = { y: e.clientY, x: e.clientX, cancelled:false, released:false };
+  voiceHold = hold;
+  const move = ev => {
+    if(voiceHold !== hold) return;
+    const dy = ev.clientY - hold.y;
+    const cancel = dy < -56;
+    if(cancel !== hold.cancelled){
+      hold.cancelled = cancel;
+      setVoiceCancelHint(cancel);
+      if(navigator.vibrate) { try{ navigator.vibrate(cancel ? 18 : 10); }catch(err){} }
+    }
+  };
+  const end = ev => {
+    if(voiceHold !== hold) return;
+    voiceHold = null;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    hold.released = true;
+    if(hold.cancelled) cancelVoiceRecord();
+    else sendVoiceMessage();
+  };
+  window.addEventListener('pointermove', move, { passive:true });
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+  startVoiceRecord(hold);
 }
 
 function setVoiceIcon(btn, playing){
@@ -7456,6 +7522,13 @@ async function deleteDiary(id){
    ========================================================= */
 let avatarTapState = null;
 const AVATAR_DBL_MS = 320;
+/* 按住说话：按下麦克风即开始录音（click 不处理） */
+document.addEventListener('pointerdown', e => {
+  const btn = e.target.closest('[data-act="voice-hold"]');
+  if(!btn) return;
+  if(e.pointerType === 'mouse' && e.button !== 0) return;
+  beginVoiceHold(e);
+}, { passive:false });
 document.addEventListener('click', async e => {
   const trigger = e.target.closest('[data-act]');
   if(!trigger) return;
@@ -7776,16 +7849,6 @@ document.addEventListener('click', async e => {
       break;
     case 'send-chat':
       sendChatText();
-      break;
-    case 'voice-toggle':
-      if(voiceRec) await sendVoiceMessage();
-      else await startVoiceRecord();
-      break;
-    case 'voice-send':
-      await sendVoiceMessage();
-      break;
-    case 'voice-cancel':
-      await cancelVoiceRecord();
       break;
     case 'voice-play':
       if(Date.now() - msgLongPressedAt < 700) break;

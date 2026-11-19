@@ -1,5 +1,5 @@
 /* 世界 · PWA Service Worker */
-const VERSION = 'world-v4';
+const VERSION = 'world-v5';
 const CORE = [
   './',
   './index.html',
